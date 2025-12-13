@@ -21,7 +21,7 @@ def ping_aternos():
         except Exception as e:
             print(f"⚠️ Ping hatası: {e}")
         
-        time.sleep(120)  # 2 dakikada bir
+        time.sleep(60)  # 1 dakikada bir
 
 if __name__ == "__main__":
     print("🚀 Bot başlatılıyor...")
