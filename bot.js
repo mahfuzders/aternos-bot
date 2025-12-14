@@ -21,7 +21,6 @@ function createBot() {
     return;
   }
   
-  // Her seferinde YENİ RANDOM İSİM
   const BOT_USERNAME = 'Bot' + Math.floor(Math.random() * 100000);
   
   console.log('\n=== YENi BOT OLUSTURULUYOR ===');
@@ -44,7 +43,6 @@ function createBot() {
     console.log('>>> BOT OYUNA GIRDI: ' + BOT_USERNAME + ' <<<');
     console.log('Konum: ' + bot.entity.position);
     
-    // 1 dakika sonra botu çıkar
     setTimeout(() => {
       console.log('1 dakika doldu, ' + BOT_USERNAME + ' cikiyor...');
       bot.quit();
@@ -62,28 +60,24 @@ function createBot() {
   bot.on('kicked', (reason) => {
     console.log(BOT_USERNAME + ' kicklendi: ' + reason);
     botActive = false;
-    setTimeout(createBot, 60000);
+    setTimeout(createBot, 5000);
   });
   
   bot.on('error', (err) => {
     console.log(BOT_USERNAME + ' hatasi: ' + err.message);
     botActive = false;
-    setTimeout(createBot, 60000);
+    setTimeout(createBot, 5000);
   });
   
   bot.on('end', () => {
     console.log(BOT_USERNAME + ' baglantisi kapandi');
     botActive = false;
-    setTimeout(createBot, 60000);
+    setTimeout(createBot, 5000);
   });
 }
 
 console.log('=== ATERNOS MINECRAFT BOT BASLADI ===');
 
 setTimeout(() => {
-  console.log('Ilk bot 20 saniye sonra baslatiliyor...');
-}, 1000);
-
-setTimeout(() => {
   createBot();
-}, 20000);
+}, 5000);
