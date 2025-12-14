@@ -35,7 +35,7 @@ function createBot() {
     username: BOT_USERNAME,
     version: false,
     auth: 'offline',
-    connectTimeout: 60000
+    connectTimeout: 120000
   });
   
   bot.on('login', () => {
