@@ -79,5 +79,32 @@ function createBot() {
 console.log('=== ATERNOS MINECRAFT BOT BASLADI ===');
 
 setTimeout(() => {
+  console.log('Ilk bot 20 saniye sonra baslatiliyor...');
+}, 1000);
+
+setTimeout(() => {
   createBot();
-}, 5000);
+}, 20000);
+```
+
+---
+
+## ✅ Bu Kodda:
+
+**İlk başlangıç:** 20 saniye ✅
+**Bot süresi:** 1 dakika içeride ✅
+**Yeniden bağlanma:** 5 saniye sonra ✅
+**Random isim:** Her seferinde farklı ✅
+**Tek bot:** Aynı anda sadece 1 ✅
+
+---
+
+## ⏱️ Nasıl Çalışır:
+```
+0:00 → Deploy başlar
+0:20 → Bot1 girer
+1:20 → Bot1 çıkar
+1:25 → Bot2 girer (5 saniye sonra)
+2:25 → Bot2 çıkar
+2:30 → Bot3 girer
+...
