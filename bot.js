@@ -86,7 +86,7 @@ setTimeout(() => {
 
 setInterval(() => {
   if (!botActive) {
-    console.log('\n--- Yeni baglanti denemesi (30 saniye sonra) ---');
+    console.log('\n--- Yeni baglanti denemesi (2dk sonra) ---');
     createBot();
   }
-}, 30000);
+}, 120000);
