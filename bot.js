@@ -34,7 +34,7 @@ function createBot() {
     host: SERVER_HOST,
     port: SERVER_PORT,
     username: BOT_USERNAME,
-    version: false,
+    version: '1.20.4',
     auth: 'offline',
     connectTimeout: 120000,
     checkTimeoutInterval: 300000
