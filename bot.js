@@ -14,7 +14,7 @@ app.listen(PORT, () => {
 
 const SERVER_HOST = 'iamsofiathefirsttt.aternos.me';
 const SERVER_PORT = 25565;
-const BOT_USERNAME = 'AternosBot';
+const BOT_USERNAME = 'Bot' + Math.floor(Math.random() * 10000);
 
 let botActive = false;
 
