@@ -29,14 +29,15 @@ function createBot() {
   
   botActive = true;
 
-  const bot = mineflayer.createBot({
+ const bot = mineflayer.createBot({
     host: SERVER_HOST,
     port: SERVER_PORT,
     username: BOT_USERNAME,
     version: false,
-    auth: 'offline'
+    auth: 'offline',
+    connectTimeout: 60000
   });
-
+  
   bot.on('login', () => {
     console.log('>>> BOT OYUNA GIRDI! <<<');
     console.log('Konum: ' + bot.entity.position);
