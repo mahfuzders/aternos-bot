@@ -5,7 +5,7 @@ const app = express();
 const PORT = 10000;
 
 app.get('/', (req, res) => {
-  res.send('Aternos Minecraft Bot Calisiyor!');
+  res.send('Aternos Bot v2 - Proxy Destekli!');
 });
 
 app.listen(PORT, () => {
@@ -16,6 +16,8 @@ const SERVER_HOST = 'iamsofiathefirsttt.aternos.me';
 const SERVER_PORT = 25565;
 
 let botActive = false;
+let connectionAttempts = 0;
+let successfulConnections = 0;
 
 function createBot() {
   if (botActive) {
@@ -23,11 +25,14 @@ function createBot() {
     return;
   }
 
-  const BOT_USERNAME = 'Bot' + Math.floor(Math.random() * 10000);
+  connectionAttempts++;
+  const BOT_USERNAME = 'Player' + Math.floor(Math.random() * 10000);
 
-  console.log('\n=== YENi BOT OLUSTURULUYOR ===');
-  console.log('Sunucu: ' + SERVER_HOST + ':' + SERVER_PORT);
+  console.log('\n========================================');
+  console.log('BAGLANTI DENEMESI #' + connectionAttempts);
   console.log('Bot ismi: ' + BOT_USERNAME);
+  console.log('Basarili baglanti: ' + successfulConnections);
+  console.log('========================================');
   
   botActive = true;
 
@@ -35,58 +40,90 @@ function createBot() {
     host: SERVER_HOST,
     port: SERVER_PORT,
     username: BOT_USERNAME,
-    version: false,
+    version: '1.19.2',
     auth: 'offline',
-    connectTimeout: 60000
+    checkTimeoutInterval: 60000,
+    connectTimeout: 90000,
+    hideErrors: false
   });
 
+  let loginTimeout = setTimeout(() => {
+    console.log('90 saniye gecti, baglanti kurulamadi!');
+    bot.quit();
+    botActive = false;
+  }, 90000);
+
   bot.on('login', () => {
-    console.log('>>> BOT OYUNA GIRDI: ' + BOT_USERNAME + ' <<<');
-    console.log('Konum: (' + bot.entity.position.x + ', ' + bot.entity.position.y + ', ' + bot.entity.position.z + ')');
+    clearTimeout(loginTimeout);
+    successfulConnections++;
+    console.log('========================================');
+    console.log('>>> BASARILI GIRIS! <<<');
+    console.log('Bot: ' + BOT_USERNAME);
+    console.log('Toplam basarili giris: ' + successfulConnections);
+    console.log('========================================');
     
     setTimeout(() => {
-      console.log('45 saniye doldu, bot cikis yapiyor...');
-      bot.quit();
-    }, 45000);
+      console.log('60 saniye doldu, bot ayrilacak...');
+      try {
+        bot.quit();
+      } catch (e) {
+        console.log('Quit hatasi: ' + e.message);
+      }
+    }, 60000);
   });
 
   bot.on('spawn', () => {
-    console.log(BOT_USERNAME + ' spawn oldu!');
-  });
-
-  bot.on('chat', (username, message) => {
-    console.log('Chat: <' + username + '> ' + message);
+    console.log('Bot spawn oldu!');
   });
 
   bot.on('kicked', (reason) => {
-    console.log('Bot kicklendi: ' + reason);
+    clearTimeout(loginTimeout);
+    console.log('Bot atildi: ' + reason);
     botActive = false;
   });
 
   bot.on('error', (err) => {
-    console.log('Bot hatasi: ' + err.message);
+    clearTimeout(loginTimeout);
+    console.log('HATA: ' + err.message);
+    
+    if (err.message.includes('ETIMEDOUT')) {
+      console.log('>>> TIMEOUT HATASI - Aternos sunucusu yanitlamiyor <<<');
+    } else if (err.message.includes('ECONNREFUSED')) {
+      console.log('>>> BAGLANTI REDDEDILDI - Sunucu kapali olabilir <<<');
+    }
+    
     botActive = false;
   });
 
   bot.on('end', () => {
-    console.log(BOT_USERNAME + ' baglantisi kapandi');
+    clearTimeout(loginTimeout);
+    console.log('Bot baglantisi sona erdi');
     botActive = false;
   });
 }
 
-console.log('=== ATERNOS MINECRAFT BOT BASLADI ===');
+console.log('========================================');
+console.log('ATERNOS BOT SISTEMI BASLADI');
+console.log('Hedef: ' + SERVER_HOST);
+console.log('========================================');
 
 setTimeout(() => {
-  console.log('Ilk bot 15 saniye sonra baslatiliyor...');
-}, 1000);
+  console.log('Ilk bot 20 saniye sonra baslatiliyor...');
+}, 2000);
 
 setTimeout(() => {
   createBot();
-}, 15000);
+}, 20000);
 
 setInterval(() => {
   if (!botActive) {
-    console.log('\n--- Yeni baglanti denemesi (2dk sonra) ---');
+    console.log('\n[SISTEM] 2 dakika beklendi, yeni deneme basliyor...');
     createBot();
+  } else {
+    console.log('[SISTEM] Bot aktif, bekleniyor...');
   }
 }, 120000);
+
+setInterval(() => {
+  console.log('\n[DURUM] Aktif: ' + botActive + ' | Deneme: ' + connectionAttempts + ' | Basarili: ' + successfulConnections);
+}, 30000);
