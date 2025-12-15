@@ -16,13 +16,6 @@ let bot = null;
 let isConnecting = false;
 let shouldReconnect = true;
 
-// 👇 SADECE BU EKLENDİ (insan gibi random)
-function humanRandom(min, max) {
-  const r = Math.random();
-  const skewed = r * r;
-  return Math.floor(min + skewed * (max - min));
-}
-
 function getRandomUsername() {
   const prefixes = [
     'Dark','Shadow','Fire','Ice','Thunder','Storm','Night','Blood','Soul','Ghost',
@@ -65,6 +58,38 @@ function getRandomUsername() {
   return username.length > 16 ? username.substring(0, 16) : username;
 }
 
+// İnsan gibi davranış ekle
+function humanizeBot() {
+  if (!bot) return;
+
+  // Kamera hareketleri (yaw/pitch)
+  const yaw = (Math.random() - 0.5) * 0.5;
+  const pitch = (Math.random() - 0.5) * 0.2;
+  bot.look(bot.entity.yaw + yaw, bot.entity.pitch + pitch, true);
+
+  // Rastgele zıplama (%10)
+  if (Math.random() < 0.1) {
+    bot.setControlState('jump', true);
+    setTimeout(() => bot.setControlState('jump', false), 300);
+  }
+
+  // Rastgele yön hareketi (%20)
+  const directions = ['forward', 'back', 'left', 'right'];
+  const dir = directions[Math.floor(Math.random() * directions.length)];
+  if (Math.random() < 0.2) {
+    bot.setControlState(dir, true);
+    setTimeout(() => bot.setControlState(dir, false), 1000 + Math.random() * 2000);
+  }
+
+  // Ara sıra duraklama (%10)
+  if (Math.random() < 0.1) {
+    Object.keys(bot.controlState).forEach(key => bot.setControlState(key, false));
+  }
+
+  // 2–5 saniye arasında tekrar et
+  setTimeout(humanizeBot, 2000 + Math.random() * 3000);
+}
+
 function createBot() {
   if (bot || isConnecting) {
     console.log('⚠️ Bot zaten aktif, yeni bot oluşturulmuyor');
@@ -87,13 +112,12 @@ function createBot() {
       keepAlive: true
     });
 
-    // timeout sonrası → 1–1.5 dk (insan gibi)
     const connectionTimeout = setTimeout(() => {
       console.log('⏱️ Bağlantı zaman aşımı');
       cleanupBot();
       setTimeout(() => {
         if (shouldReconnect) createBot();
-      }, humanRandom(60, 90) * 1000);
+      }, Math.floor(Math.random() * 90000));
     }, 60000);
 
     bot.once('login', () => {
@@ -101,9 +125,11 @@ function createBot() {
       isConnecting = false;
       console.log('✅ Giriş başarılı:', username);
 
-      // kalma süresi → 1–2 dk (insan gibi)
-      const stayTime = humanRandom(60, 120) * 1000;
+      // Kalma süresi 1–1.5 dakika
+      const stayTime = 60 * 1000 + Math.floor(Math.random() * 30 * 1000);
       console.log('⏱️ Kalma süresi:', Math.floor(stayTime / 1000), 'saniye');
+
+      humanizeBot(); // insan davranışlarını başlat
 
       setTimeout(() => {
         console.log('👋 Bot çıkıyor...');
@@ -120,8 +146,7 @@ function createBot() {
       console.log('❌ Bağlantı kesildi:', reason || 'bilinmiyor');
       cleanupBot();
 
-      // yeniden giriş → 1–1.5 dk
-      const waitTime = humanRandom(60, 90) * 1000;
+      const waitTime = Math.floor(Math.random() * 90000);
       console.log('⏳ Yeni bot:', Math.floor(waitTime / 1000), 'saniye sonra');
 
       setTimeout(() => {
@@ -136,7 +161,7 @@ function createBot() {
 
       setTimeout(() => {
         if (shouldReconnect) createBot();
-      }, humanRandom(60, 90) * 1000);
+      }, Math.floor(Math.random() * 90000));
     });
 
     bot.on('error', (err) => {
@@ -152,9 +177,12 @@ function createBot() {
 
       cleanupBot();
 
+      const waitTime = Math.floor(Math.random() * 90000);
+      console.log('⏳ Yeniden deneme:', Math.floor(waitTime / 1000), 'saniye sonra');
+
       setTimeout(() => {
         if (shouldReconnect) createBot();
-      }, humanRandom(60, 90) * 1000);
+      }, waitTime);
     });
 
   } catch (err) {
@@ -163,7 +191,7 @@ function createBot() {
 
     setTimeout(() => {
       if (shouldReconnect) createBot();
-    }, humanRandom(60, 90) * 1000);
+    }, Math.floor(Math.random() * 90000));
   }
 }
 
