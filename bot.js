@@ -93,7 +93,7 @@ function createBot() {
       isConnecting = false;
       console.log('✅ Giriş başarılı:', username);
 
-      // 0–2 dakika kal (max 2 dk)
+      // max 2 dakika random
       const stayTime = Math.floor(Math.random() * 120) * 1000;
       console.log('⏱️ Kalma süresi:', Math.floor(stayTime / 1000), 'saniye');
 
@@ -112,7 +112,6 @@ function createBot() {
       console.log('❌ Bağlantı kesildi:', reason || 'bilinmiyor');
       cleanupBot();
 
-      // 0–1.5 dakika bekle (max 90 sn)
       const waitTime = Math.floor(Math.random() * 90) * 1000;
       console.log('⏳ Yeni bot:', Math.floor(waitTime / 1000), 'saniye sonra');
 
@@ -126,7 +125,6 @@ function createBot() {
       console.log('⚠️ Kicklendi:', reason);
       cleanupBot();
 
-      // 0–1.5 dakika bekle
       setTimeout(() => {
         if (shouldReconnect) createBot();
       }, Math.floor(Math.random() * 90) * 1000);
@@ -145,7 +143,6 @@ function createBot() {
 
       cleanupBot();
 
-      // max 1.5 dakika random
       const waitTime = Math.floor(Math.random() * 90) * 1000;
       console.log('⏳ Yeniden deneme:', Math.floor(waitTime / 1000), 'saniye sonra');
 
