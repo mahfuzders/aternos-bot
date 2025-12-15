@@ -1,6 +1,5 @@
 const mineflayer = require('mineflayer');
 const express = require('express');
-
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -36,18 +35,18 @@ function getRandomUsername() {
   ];
   
   const styles = [
-    () => prefixes[Math.floor(Math.random() * prefixes.length)] +
-          suffixes[Math.floor(Math.random() * suffixes.length)] +
+    () => prefixes[Math.floor(Math.random() * prefixes.length)] + 
+          suffixes[Math.floor(Math.random() * suffixes.length)] + 
           Math.floor(Math.random() * 9999),
-    () => prefixes[Math.floor(Math.random() * prefixes.length)] +
-          Math.floor(Math.random() * 999) +
+    () => prefixes[Math.floor(Math.random() * prefixes.length)] + 
+          Math.floor(Math.random() * 999) + 
           suffixes[Math.floor(Math.random() * suffixes.length)],
-    () => 'xX_' + prefixes[Math.floor(Math.random() * prefixes.length)] +
+    () => 'xX_' + prefixes[Math.floor(Math.random() * prefixes.length)] + 
           suffixes[Math.floor(Math.random() * suffixes.length)] + '_Xx',
-    () => prefixes[Math.floor(Math.random() * prefixes.length)] + '_' +
-          suffixes[Math.floor(Math.random() * suffixes.length)] + '_' +
+    () => prefixes[Math.floor(Math.random() * prefixes.length)] + '_' + 
+          suffixes[Math.floor(Math.random() * suffixes.length)] + '_' + 
           Math.floor(Math.random() * 999),
-    () => prefixes[Math.floor(Math.random() * prefixes.length)] +
+    () => prefixes[Math.floor(Math.random() * prefixes.length)] + 
           Math.floor(Math.random() * 99999)
   ];
   
@@ -82,10 +81,13 @@ function createBot() {
     const connectionTimeout = setTimeout(() => {
       console.log('⏱️ Bağlantı zaman aşımı');
       cleanupBot();
-      // 90 saniye (1.5 dakika) bekle, tekrar dene
+      
+      // 30-90 saniye bekle (maks 1.5 dk)
+      const waitTime = (30 + Math.floor(Math.random() * 60)) * 1000;
+      console.log('⏳ Yeni bot:', Math.floor(waitTime / 1000), 'saniye sonra');
       setTimeout(() => {
         if (shouldReconnect) createBot();
-      }, 90000);
+      }, waitTime);
     }, 60000);
     
     bot.once('login', () => {
@@ -93,8 +95,8 @@ function createBot() {
       isConnecting = false;
       console.log('✅ Giriş başarılı:', username);
       
-      // 2 dakika kal (120 saniye)
-      const stayTime = 120000;
+      // 60-120 saniye kal (1-2 dakika)
+      const stayTime = (60 + Math.floor(Math.random() * 60)) * 1000;
       console.log('⏱️ Kalma süresi:', Math.floor(stayTime / 1000), 'saniye');
       
       setTimeout(() => {
@@ -116,8 +118,8 @@ function createBot() {
       console.log('❌ Bağlantı kesildi:', reason || 'bilinmiyor');
       cleanupBot();
       
-      // 90 saniye (1.5 dakika) bekle, sonra yeni bot
-      const waitTime = 90000;
+      // 30-90 saniye bekle (maks 1.5 dk)
+      const waitTime = (30 + Math.floor(Math.random() * 60)) * 1000;
       console.log('⏳ Yeni bot:', Math.floor(waitTime / 1000), 'saniye sonra');
       
       setTimeout(() => {
@@ -130,14 +132,18 @@ function createBot() {
       console.log('⚠️ Kicklendi:', reason);
       cleanupBot();
       
-      // 90 saniye (1.5 dakika) bekle
+      // 60-90 saniye bekle (1-1.5 dk)
+      const waitTime = (60 + Math.floor(Math.random() * 30)) * 1000;
+      console.log('⏳ Yeni bot:', Math.floor(waitTime / 1000), 'saniye sonra');
+      
       setTimeout(() => {
         if (shouldReconnect) createBot();
-      }, 90000);
+      }, waitTime);
     });
     
     bot.on('error', (err) => {
       clearTimeout(connectionTimeout);
+      
       if (err.code === 'ECONNREFUSED') {
         console.log('⚠️ Sunucu kapalı');
       } else if (err.code === 'ECONNRESET') {
@@ -145,10 +151,14 @@ function createBot() {
       } else {
         console.log('⚠️ Hata:', err.message);
       }
+      
       cleanupBot();
       
-      // Hata türüne göre bekleme süresi - 90 saniye (1.5 dakika)
-      const waitTime = 90000;
+      // Sunucu kapalıysa 60-90 saniye, diğer hatalarda 30-60 saniye bekle
+      const waitTime = err.code === 'ECONNREFUSED' 
+        ? (60 + Math.floor(Math.random() * 30)) * 1000  // 60-90 sn
+        : (30 + Math.floor(Math.random() * 30)) * 1000;  // 30-60 sn
+      
       console.log('⏳ Yeniden deneme:', Math.floor(waitTime / 1000), 'saniye sonra');
       
       setTimeout(() => {
@@ -159,9 +169,14 @@ function createBot() {
   } catch (err) {
     console.log('⚠️ Bot oluşturma hatası:', err.message);
     cleanupBot();
+    
+    // 30-60 saniye bekle
+    const waitTime = (30 + Math.floor(Math.random() * 30)) * 1000;
+    console.log('⏳ Yeni bot:', Math.floor(waitTime / 1000), 'saniye sonra');
+    
     setTimeout(() => {
       if (shouldReconnect) createBot();
-    }, 90000);
+    }, waitTime);
   }
 }
 
@@ -180,7 +195,9 @@ function cleanupBot() {
 console.log('🚀 Minecraft Bot Başlatılıyor...');
 console.log('🎯 Sunucu: iamsofiathefirsttt.aternos.me');
 console.log('📦 Versiyon: 1.20.4');
-console.log('🔄 Mod: Tek bot, sırayla giriş\n');
+console.log('🔄 Mod: Tek bot, sırayla giriş');
+console.log('⏱️ Oyunda kalma: 1-2 dakika');
+console.log('⏳ Bekleme süresi: 0.5-1.5 dakika\n');
 
 // İlk botu başlat
 setTimeout(() => createBot(), 2000);
