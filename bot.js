@@ -73,12 +73,9 @@ function createBot() {
       version: '1.20.4',
       auth: 'offline',
       hideErrors: false,
-      checkTimeoutInterval: 60000,
+      checkTimeoutInterval: 60000, // 60 saniyeye çıkar
       keepAlive: true,
-      connectTimeout: 120000,
-      // Render'dan bağlantı için ek ayarlar
-      skipValidation: true,
-      viewDistance: 'tiny'
+      connectTimeout: 120000 // 2 dakika bağlantı timeout'u
     });
     
     // 2 dakika içinde bağlanamazsa timeout (Aternos uyanma süresi için)
