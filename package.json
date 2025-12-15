@@ -1,7 +1,7 @@
 {
-  "name": "aternos-bot",
-  "version": "1.0.0",
-  "description": "Minecraft Aternos Bot with Control Panel",
+  "name": "aternos-bot-pro",
+  "version": "2.0.0",
+  "description": "Minecraft Aternos Bot PRO with Multi-Bot Dashboard",
   "main": "bot.js",
   "scripts": {
     "start": "node bot.js"
