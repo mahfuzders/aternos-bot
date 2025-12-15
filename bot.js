@@ -1,29 +1,25 @@
 const mineflayer = require('mineflayer');
 const express = require('express');
 const bodyParser = require('body-parser');
-const session = require('express-session');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
-app.use(session({
-  secret: 'aternos-bot-secret-key-2024',
-  resave: false,
-  saveUninitialized: false,
-  cookie: { maxAge: 24 * 60 * 60 * 1000 } // 24 saat
-}));
+
+// Basit session sistemi (memory-based)
+const sessions = {};
 
 // Admin bilgileri (değiştir!)
 const ADMIN = {
-  username: 'tahadoguu7',
-  password: 'taha2009' // ⚠️ DEĞİŞTİR!
+  username: 'admin',
+  password: 'admin123' // ⚠️ DEĞİŞTİR!
 };
 
 // Sunucular ve botlar
 let servers = {}; // { serverId: { name, host, port, version, bots: [] } }
-let bots = {}; // { botId: { bot, serverId, stats, isConnecting } }
+let bots = {}; // { botId: { bot, serverId, stats, isConnecting, customConfig } }
 
 const defaultConfig = {
   minStayTime: 90,
@@ -39,15 +35,25 @@ let config = { ...defaultConfig };
 
 // Auth Middleware
 function requireAuth(req, res, next) {
-  if (req.session && req.session.authenticated) {
+  const token = req.headers.cookie?.split('authToken=')[1]?.split(';')[0];
+  if (token && sessions[token]) {
+    req.user = sessions[token];
     return next();
   }
   res.redirect('/login');
 }
 
+function setAuthCookie(res, username) {
+  const token = Date.now() + '_' + Math.random().toString(36);
+  sessions[token] = { username, time: Date.now() };
+  res.setHeader('Set-Cookie', `authToken=${token}; Path=/; Max-Age=86400`); // 24 saat
+  return token;
+}
+
 // Login Sayfası
 app.get('/login', (req, res) => {
-  if (req.session && req.session.authenticated) {
+  const token = req.headers.cookie?.split('authToken=')[1]?.split(';')[0];
+  if (token && sessions[token]) {
     return res.redirect('/');
   }
   
@@ -167,8 +173,7 @@ app.post('/login', (req, res) => {
   const { username, password } = req.body;
   
   if (username === ADMIN.username && password === ADMIN.password) {
-    req.session.authenticated = true;
-    req.session.username = username;
+    setAuthCookie(res, username);
     res.redirect('/');
   } else {
     res.redirect('/login?error=1');
@@ -177,7 +182,9 @@ app.post('/login', (req, res) => {
 
 // Logout
 app.get('/logout', (req, res) => {
-  req.session.destroy();
+  const token = req.headers.cookie?.split('authToken=')[1]?.split(';')[0];
+  if (token) delete sessions[token];
+  res.setHeader('Set-Cookie', 'authToken=; Path=/; Max-Age=0');
   res.redirect('/login');
 });
 
@@ -203,7 +210,7 @@ app.get('/', requireAuth, (req, res) => {
         <div class="header">
           <div>
             <h1>🤖 Aternos Bot PRO</h1>
-            <p style="color: #6b7280; margin-top: 5px;">Hoş geldin, ${req.session.username}</p>
+            <p style="color: #6b7280; margin-top: 5px;">Hoş geldin, ${req.user.username}</p>
           </div>
           <div class="header-stats">
             <span class="stat-badge badge-primary">🖥️ Sunucu: ${serverCount}</span>
@@ -323,6 +330,123 @@ app.get('/', requireAuth, (req, res) => {
   `);
 });
 
+// Bot Detay Sayfası
+app.get('/bot/:botId', requireAuth, (req, res) => {
+  const botId = req.params.botId;
+  const botData = bots[botId];
+  
+  if (!botData) {
+    return res.redirect('/');
+  }
+  
+  const server = servers[botData.serverId];
+  const customCfg = botData.customConfig || {};
+  
+  res.send(`
+    <!DOCTYPE html>
+    <html lang="tr">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Bot Ayarları - ${botData.stats.username || 'Bot'}</title>
+      <style>
+        ${getStyles()}
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <div>
+            <h1>🤖 ${botData.stats.username || 'Bot Ayarları'}</h1>
+            <p style="color: #6b7280; margin-top: 5px;">Sunucu: ${server.name}</p>
+          </div>
+          <button onclick="window.location.href='/server/${botData.serverId}'" class="btn btn-secondary">← Geri Dön</button>
+        </div>
+        
+        <div class="grid">
+          <div class="card">
+            <h2>📊 Bot İstatistikleri</h2>
+            <div class="stat">
+              <span class="stat-label">Durum</span>
+              <span class="stat-value">${botData.bot ? '🟢 Online' : (botData.isConnecting ? '🟡 Bağlanıyor' : '🔴 Offline')}</span>
+            </div>
+            <div class="stat">
+              <span class="stat-label">Kullanıcı Adı</span>
+              <span class="stat-value">${botData.stats.username || 'Yükleniyor...'}</span>
+            </div>
+            <div class="stat">
+              <span class="stat-label">Toplam Bağlantı</span>
+              <span class="stat-value">${botData.stats.connections}</span>
+            </div>
+            <div class="stat">
+              <span class="stat-label">Başarılı</span>
+              <span class="stat-value">${botData.stats.successes}</span>
+            </div>
+            <div class="stat">
+              <span class="stat-label">Hata</span>
+              <span class="stat-value">${botData.stats.errors}</span>
+            </div>
+            <div class="stat">
+              <span class="stat-label">Kick</span>
+              <span class="stat-value">${botData.stats.kicks}</span>
+            </div>
+          </div>
+          
+          <div class="card">
+            <h2>⚙️ Bot Özel Ayarları</h2>
+            <p style="color: #6b7280; margin-bottom: 20px; font-size: 14px;">
+              Bu ayarlar sadece bu bot için geçerlidir. Boş bırakılırsa genel ayarlar kullanılır.
+            </p>
+            <form action="/api/update-bot-config/${botId}" method="POST">
+              <div class="form-group">
+                <label>Min Kalma Süresi (saniye)</label>
+                <input type="number" name="minStayTime" value="${customCfg.minStayTime || ''}" placeholder="Varsayılan: ${config.minStayTime}">
+              </div>
+              <div class="form-group">
+                <label>Max Kalma Süresi (saniye)</label>
+                <input type="number" name="maxStayTime" value="${customCfg.maxStayTime || ''}" placeholder="Varsayılan: ${config.maxStayTime}">
+              </div>
+              <div class="form-group">
+                <label>Min Bekleme Süresi (saniye)</label>
+                <input type="number" name="minWaitTime" value="${customCfg.minWaitTime || ''}" placeholder="Varsayılan: ${config.minWaitTime}">
+              </div>
+              <div class="form-group">
+                <label>Max Bekleme Süresi (saniye)</label>
+                <input type="number" name="maxWaitTime" value="${customCfg.maxWaitTime || ''}" placeholder="Varsayılan: ${config.maxWaitTime}">
+              </div>
+              <div class="form-group checkbox-group">
+                <input type="checkbox" name="enableMovement" ${(customCfg.enableMovement !== undefined ? customCfg.enableMovement : config.enableMovement) ? 'checked' : ''}>
+                <label>Hareket Simülasyonu</label>
+              </div>
+              <div class="form-group checkbox-group">
+                <input type="checkbox" name="autoReconnect" ${(customCfg.autoReconnect !== undefined ? customCfg.autoReconnect : config.autoReconnect) ? 'checked' : ''}>
+                <label>Otomatik Yeniden Bağlan</label>
+              </div>
+              <button type="submit" class="btn btn-primary">💾 Kaydet</button>
+              <button type="button" onclick="if(confirm('Özel ayarları sıfırlamak istediğinize emin misiniz?')) window.location.href='/api/reset-bot-config/${botId}'" class="btn btn-secondary">🔄 Varsayılana Dön</button>
+            </form>
+          </div>
+        </div>
+        
+        <div class="card">
+          <h2>🎛️ Bot Kontrolü</h2>
+          <form action="/api/restart-bot/${botId}" method="POST" style="display: inline;">
+            <button type="submit" class="btn btn-warning">🔄 Botu Yeniden Başlat</button>
+          </form>
+          <form action="/api/stop-bot/${botId}" method="POST" style="display: inline;">
+            <button type="submit" class="btn btn-danger">⏹️ Botu Durdur</button>
+          </form>
+        </div>
+      </div>
+      
+      <script>
+        setTimeout(() => location.reload(), 10000); // 10 saniyede bir yenile
+      </script>
+    </body>
+    </html>
+  `);
+});
+
 // Sunucu Detay Sayfası
 app.get('/server/:serverId', requireAuth, (req, res) => {
   const serverId = req.params.serverId;
@@ -393,9 +517,12 @@ app.get('/server/:serverId', requireAuth, (req, res) => {
                     <span class="bot-status ${isOnline ? 'status-online' : (isConnecting ? 'status-connecting' : 'status-offline')}"></span>
                     <strong>${stats.username || 'Bot #' + botId.substr(-8)}</strong>
                   </div>
-                  <form action="/api/remove-bot/${botId}" method="POST" style="display: inline;">
-                    <button type="submit" class="btn btn-danger btn-small" onclick="return confirm('Botu silmek istediğinize emin misiniz?')">🗑️</button>
-                  </form>
+                  <div>
+                    <button onclick="window.location.href='/bot/${botId}'" class="btn btn-primary btn-small">⚙️</button>
+                    <form action="/api/remove-bot/${botId}" method="POST" style="display: inline;">
+                      <button type="submit" class="btn btn-danger btn-small" onclick="return confirm('Botu silmek istediğinize emin misiniz?')">🗑️</button>
+                    </form>
+                  </div>
                 </div>
                 <div class="stat">
                   <span class="stat-label">Durum</span>
@@ -680,6 +807,49 @@ app.post('/api/restart-all-bots/:serverId', requireAuth, (req, res) => {
   res.redirect(`/server/${serverId}`);
 });
 
+app.post('/api/update-bot-config/:botId', requireAuth, (req, res) => {
+  const botId = req.params.botId;
+  if (!bots[botId]) return res.redirect('/');
+  
+  bots[botId].customConfig = {
+    minStayTime: req.body.minStayTime ? parseInt(req.body.minStayTime) : undefined,
+    maxStayTime: req.body.maxStayTime ? parseInt(req.body.maxStayTime) : undefined,
+    minWaitTime: req.body.minWaitTime ? parseInt(req.body.minWaitTime) : undefined,
+    maxWaitTime: req.body.maxWaitTime ? parseInt(req.body.maxWaitTime) : undefined,
+    enableMovement: req.body.enableMovement === 'on',
+    autoReconnect: req.body.autoReconnect === 'on'
+  };
+  
+  console.log('⚙️ Bot özel ayarları güncellendi:', botId.substr(-8));
+  res.redirect(`/bot/${botId}`);
+});
+
+app.get('/api/reset-bot-config/:botId', requireAuth, (req, res) => {
+  const botId = req.params.botId;
+  if (bots[botId]) {
+    bots[botId].customConfig = {};
+    console.log('🔄 Bot ayarları varsayılana döndürüldü:', botId.substr(-8));
+  }
+  res.redirect(`/bot/${botId}`);
+});
+
+app.post('/api/restart-bot/:botId', requireAuth, (req, res) => {
+  const botId = req.params.botId;
+  if (bots[botId]) {
+    cleanupBot(botId);
+    setTimeout(() => connectBot(botId), 2000);
+  }
+  res.redirect(`/bot/${botId}`);
+});
+
+app.post('/api/stop-bot/:botId', requireAuth, (req, res) => {
+  const botId = req.params.botId;
+  if (bots[botId]) {
+    cleanupBot(botId);
+  }
+  res.redirect(`/bot/${botId}`);
+});
+
 app.post('/api/update-config', requireAuth, (req, res) => {
   config.minStayTime = parseInt(req.body.minStayTime);
   config.maxStayTime = parseInt(req.body.maxStayTime);
@@ -718,7 +888,14 @@ function getRandomUsername() {
 }
 
 function humanizeBot(botId) {
-  if (!bots[botId] || !bots[botId].bot || !config.enableMovement) return;
+  if (!bots[botId] || !bots[botId].bot) return;
+  
+  // Bot özel ayarlarını kontrol et
+  const botCfg = bots[botId].customConfig || {};
+  const enableMov = botCfg.enableMovement !== undefined ? botCfg.enableMovement : config.enableMovement;
+  
+  if (!enableMov) return;
+  
   const bot = bots[botId].bot;
   
   try {
@@ -752,6 +929,7 @@ function createBotForServer(serverId) {
     bot: null,
     isConnecting: false,
     serverId: serverId,
+    customConfig: {}, // Bot özel ayarları
     stats: {
       username: null,
       connections: 0,
@@ -806,9 +984,15 @@ function connectBot(botId) {
       bots[botId].stats.successes++;
       console.log(`✅ [${botId.substr(-8)}] Giriş:`, username);
       
-      const stay = config.minStayTime * 1000 + Math.random() * (config.maxStayTime - config.minStayTime) * 1000;
+      // Bot özel ayarları varsa kullan, yoksa genel ayarları kullan
+      const botCfg = bots[botId].customConfig || {};
+      const minStay = botCfg.minStayTime !== undefined ? botCfg.minStayTime : config.minStayTime;
+      const maxStay = botCfg.maxStayTime !== undefined ? botCfg.maxStayTime : config.maxStayTime;
+      const enableMov = botCfg.enableMovement !== undefined ? botCfg.enableMovement : config.enableMovement;
       
-      if (config.enableMovement) humanizeBot(botId);
+      const stay = minStay * 1000 + Math.random() * (maxStay - minStay) * 1000;
+      
+      if (enableMov) humanizeBot(botId);
       
       setTimeout(() => {
         console.log(`👋 [${botId.substr(-8)}] Çıkış`);
@@ -850,8 +1034,15 @@ function reconnectBot(botId) {
   
   cleanupBot(botId);
   
-  if (config.autoReconnect) {
-    const wait = config.minWaitTime * 1000 + Math.random() * (config.maxWaitTime - config.minWaitTime) * 1000;
+  // Bot özel ayarları varsa kullan
+  const botCfg = bots[botId].customConfig || {};
+  const autoRecon = botCfg.autoReconnect !== undefined ? botCfg.autoReconnect : config.autoReconnect;
+  
+  if (autoRecon) {
+    const minWait = botCfg.minWaitTime !== undefined ? botCfg.minWaitTime : config.minWaitTime;
+    const maxWait = botCfg.maxWaitTime !== undefined ? botCfg.maxWaitTime : config.maxWaitTime;
+    const wait = minWait * 1000 + Math.random() * (maxWait - minWait) * 1000;
+    
     setTimeout(() => {
       if (bots[botId]) connectBot(botId);
     }, wait);
