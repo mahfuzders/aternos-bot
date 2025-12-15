@@ -16,6 +16,13 @@ let bot = null;
 let isConnecting = false;
 let shouldReconnect = true;
 
+// 👇 SADECE BU EKLENDİ (insan gibi random)
+function humanRandom(min, max) {
+  const r = Math.random();
+  const skewed = r * r;
+  return Math.floor(min + skewed * (max - min));
+}
+
 function getRandomUsername() {
   const prefixes = [
     'Dark','Shadow','Fire','Ice','Thunder','Storm','Night','Blood','Soul','Ghost',
@@ -80,12 +87,13 @@ function createBot() {
       keepAlive: true
     });
 
+    // timeout sonrası → 1–1.5 dk (insan gibi)
     const connectionTimeout = setTimeout(() => {
       console.log('⏱️ Bağlantı zaman aşımı');
       cleanupBot();
       setTimeout(() => {
         if (shouldReconnect) createBot();
-      }, Math.floor(Math.random() * 90) * 1000);
+      }, humanRandom(60, 90) * 1000);
     }, 60000);
 
     bot.once('login', () => {
@@ -93,8 +101,8 @@ function createBot() {
       isConnecting = false;
       console.log('✅ Giriş başarılı:', username);
 
-      // max 2 dakika random
-      const stayTime = Math.floor(Math.random() * 120) * 1000;
+      // kalma süresi → 1–2 dk (insan gibi)
+      const stayTime = humanRandom(60, 120) * 1000;
       console.log('⏱️ Kalma süresi:', Math.floor(stayTime / 1000), 'saniye');
 
       setTimeout(() => {
@@ -112,7 +120,8 @@ function createBot() {
       console.log('❌ Bağlantı kesildi:', reason || 'bilinmiyor');
       cleanupBot();
 
-      const waitTime = Math.floor(Math.random() * 90) * 1000;
+      // yeniden giriş → 1–1.5 dk
+      const waitTime = humanRandom(60, 90) * 1000;
       console.log('⏳ Yeni bot:', Math.floor(waitTime / 1000), 'saniye sonra');
 
       setTimeout(() => {
@@ -127,7 +136,7 @@ function createBot() {
 
       setTimeout(() => {
         if (shouldReconnect) createBot();
-      }, Math.floor(Math.random() * 90) * 1000);
+      }, humanRandom(60, 90) * 1000);
     });
 
     bot.on('error', (err) => {
@@ -143,12 +152,9 @@ function createBot() {
 
       cleanupBot();
 
-      const waitTime = Math.floor(Math.random() * 90) * 1000;
-      console.log('⏳ Yeniden deneme:', Math.floor(waitTime / 1000), 'saniye sonra');
-
       setTimeout(() => {
         if (shouldReconnect) createBot();
-      }, waitTime);
+      }, humanRandom(60, 90) * 1000);
     });
 
   } catch (err) {
@@ -157,7 +163,7 @@ function createBot() {
 
     setTimeout(() => {
       if (shouldReconnect) createBot();
-    }, Math.floor(Math.random() * 90) * 1000);
+    }, humanRandom(60, 90) * 1000);
   }
 }
 
