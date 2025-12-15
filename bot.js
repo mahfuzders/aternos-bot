@@ -1,179 +1,94 @@
 const mineflayer = require('mineflayer');
 const express = require('express');
 const bodyParser = require('body-parser');
+const session = require('express-session');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
+app.use(session({
+  secret: 'aternos-bot-secret-key-2024',
+  resave: false,
+  saveUninitialized: false,
+  cookie: { maxAge: 24 * 60 * 60 * 1000 } // 24 saat
+}));
 
-// Multi-bot yönetimi
-let bots = {}; // { botId: { bot, config, stats, isConnecting } }
-let globalStats = {
-  totalBots: 0,
-  activeBots: 0,
-  totalConnections: 0,
-  totalErrors: 0,
-  startTime: Date.now()
+// Admin bilgileri (değiştir!)
+const ADMIN = {
+  username: 'tahadoguu7',
+  password: 'taha2009' // ⚠️ DEĞİŞTİR!
 };
 
-// Varsayılan sunucu listesi
-let servers = [
-  {
-    id: 'server1',
-    name: 'Ana Sunucu',
-    host: 'iamsofiathefirsttt.aternos.me',
-    port: 25565,
-    version: '1.20.4',
-    enabled: true
-  }
-];
+// Sunucular ve botlar
+let servers = {}; // { serverId: { name, host, port, version, bots: [] } }
+let bots = {}; // { botId: { bot, serverId, stats, isConnecting } }
 
-// Bot konfigürasyonu
 const defaultConfig = {
-  minStayTime: 60,
-  maxStayTime: 120,
+  minStayTime: 90,
+  maxStayTime: 180,
   minWaitTime: 30,
-  maxWaitTime: 90,
-  enableMovement: true,
+  maxWaitTime: 60,
+  enableMovement: false,
   autoReconnect: true,
-  maxConcurrentBots: 3 // Aynı anda max bot sayısı
+  maxBotsPerServer: 5 // Sunucu başına max bot
 };
 
 let config = { ...defaultConfig };
 
-// Ana Dashboard
-app.get('/', (req, res) => {
-  const uptime = Math.floor((Date.now() - globalStats.startTime) / 1000);
-  const hours = Math.floor(uptime / 3600);
-  const minutes = Math.floor((uptime % 3600) / 60);
-  const seconds = uptime % 60;
+// Auth Middleware
+function requireAuth(req, res, next) {
+  if (req.session && req.session.authenticated) {
+    return next();
+  }
+  res.redirect('/login');
+}
 
-  const activeBots = Object.values(bots).filter(b => b.bot).length;
-  const connectingBots = Object.values(bots).filter(b => b.isConnecting).length;
-
+// Login Sayfası
+app.get('/login', (req, res) => {
+  if (req.session && req.session.authenticated) {
+    return res.redirect('/');
+  }
+  
   res.send(`
     <!DOCTYPE html>
     <html lang="tr">
     <head>
       <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>Aternos Bot PRO - Multi-Bot Manager</title>
+      <title>Admin Girişi - Aternos Bot PRO</title>
       <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
           font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
           background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
           min-height: 100vh;
+          display: flex;
+          align-items: center;
+          justify-content: center;
           padding: 20px;
         }
-        .container { max-width: 1400px; margin: 0 auto; }
-        
-        .header {
+        .login-card {
           background: white;
-          padding: 30px;
-          border-radius: 15px;
-          box-shadow: 0 10px 30px rgba(0,0,0,0.2);
-          margin-bottom: 20px;
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          flex-wrap: wrap;
-          gap: 20px;
-        }
-        .header h1 { color: #667eea; font-size: 28px; }
-        .header-stats {
-          display: flex;
-          gap: 20px;
-          flex-wrap: wrap;
-        }
-        .stat-badge {
-          padding: 10px 20px;
+          padding: 40px;
           border-radius: 20px;
-          font-weight: bold;
-          font-size: 14px;
+          box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+          max-width: 400px;
+          width: 100%;
         }
-        .badge-primary { background: #667eea; color: white; }
-        .badge-success { background: #10b981; color: white; }
-        .badge-warning { background: #f59e0b; color: white; }
-        .badge-danger { background: #ef4444; color: white; }
-        
-        .tabs {
-          display: flex;
-          gap: 10px;
-          margin-bottom: 20px;
-          flex-wrap: wrap;
+        .login-header {
+          text-align: center;
+          margin-bottom: 30px;
         }
-        .tab {
-          padding: 12px 25px;
-          background: white;
-          border: none;
-          border-radius: 10px;
-          font-weight: bold;
-          cursor: pointer;
-          box-shadow: 0 5px 15px rgba(0,0,0,0.1);
-          transition: all 0.3s;
-        }
-        .tab:hover { transform: translateY(-2px); }
-        .tab.active { background: #667eea; color: white; }
-        
-        .grid {
-          display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
-          gap: 20px;
-          margin-bottom: 20px;
-        }
-        .card {
-          background: white;
-          padding: 25px;
-          border-radius: 15px;
-          box-shadow: 0 10px 30px rgba(0,0,0,0.2);
-        }
-        .card h2 {
+        .login-header h1 {
           color: #667eea;
-          margin-bottom: 15px;
-          font-size: 20px;
-          display: flex;
-          align-items: center;
-          gap: 10px;
+          font-size: 32px;
+          margin-bottom: 10px;
         }
-        
-        .bot-card {
-          border-left: 4px solid #667eea;
-          position: relative;
+        .login-header p {
+          color: #6b7280;
         }
-        .bot-card.online { border-left-color: #10b981; }
-        .bot-card.connecting { border-left-color: #f59e0b; }
-        .bot-card.offline { border-left-color: #ef4444; }
-        
-        .bot-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          margin-bottom: 15px;
-        }
-        .bot-status {
-          display: inline-block;
-          width: 12px;
-          height: 12px;
-          border-radius: 50%;
-          margin-right: 8px;
-        }
-        .status-online { background: #10b981; }
-        .status-connecting { background: #f59e0b; }
-        .status-offline { background: #ef4444; }
-        
-        .stat {
-          display: flex;
-          justify-content: space-between;
-          padding: 10px 0;
-          border-bottom: 1px solid #e5e7eb;
-        }
-        .stat:last-child { border-bottom: none; }
-        .stat-label { color: #6b7280; font-weight: 500; }
-        .stat-value { color: #111827; font-weight: bold; }
-        
         .form-group {
           margin-bottom: 20px;
         }
@@ -183,81 +98,104 @@ app.get('/', (req, res) => {
           color: #374151;
           font-weight: 600;
         }
-        .form-group input, .form-group select {
+        .form-group input {
           width: 100%;
-          padding: 12px;
+          padding: 15px;
           border: 2px solid #e5e7eb;
-          border-radius: 8px;
-          font-size: 14px;
+          border-radius: 10px;
+          font-size: 16px;
           transition: border-color 0.3s;
         }
-        .form-group input:focus, .form-group select:focus {
+        .form-group input:focus {
           outline: none;
           border-color: #667eea;
         }
-        
         .btn {
-          padding: 10px 20px;
+          width: 100%;
+          padding: 15px;
+          background: #667eea;
+          color: white;
           border: none;
-          border-radius: 8px;
-          font-size: 14px;
+          border-radius: 10px;
+          font-size: 18px;
           font-weight: bold;
           cursor: pointer;
           transition: all 0.3s;
-          margin-right: 8px;
-          margin-bottom: 8px;
         }
-        .btn:hover { transform: translateY(-2px); box-shadow: 0 5px 15px rgba(0,0,0,0.2); }
-        .btn-primary { background: #667eea; color: white; }
-        .btn-success { background: #10b981; color: white; }
-        .btn-danger { background: #ef4444; color: white; }
-        .btn-warning { background: #f59e0b; color: white; }
-        .btn-secondary { background: #6b7280; color: white; }
-        .btn-small { padding: 6px 12px; font-size: 12px; }
-        
-        .server-list {
-          display: flex;
-          flex-direction: column;
-          gap: 10px;
+        .btn:hover {
+          background: #5568d3;
+          transform: translateY(-2px);
+          box-shadow: 0 10px 25px rgba(102,126,234,0.4);
         }
-        .server-item {
-          background: #f9fafb;
-          padding: 15px;
-          border-radius: 8px;
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-        }
-        .server-info h3 { color: #374151; margin-bottom: 5px; }
-        .server-info p { color: #6b7280; font-size: 13px; }
-        
-        .progress-bar {
-          width: 100%;
-          height: 8px;
-          background: #e5e7eb;
-          border-radius: 10px;
-          overflow: hidden;
-          margin-top: 10px;
-        }
-        .progress-fill {
-          height: 100%;
-          background: linear-gradient(90deg, #667eea, #764ba2);
-          transition: width 0.3s;
-        }
-        
-        .alert {
-          padding: 15px;
+        .error {
+          background: #fee;
+          color: #c33;
+          padding: 12px;
           border-radius: 8px;
           margin-bottom: 20px;
+          text-align: center;
+          font-weight: 500;
         }
-        .alert-info { background: #dbeafe; color: #1e40af; }
-        .alert-warning { background: #fef3c7; color: #92400e; }
-        .alert-success { background: #d1fae5; color: #065f46; }
-        
-        @media (max-width: 768px) {
-          .grid { grid-template-columns: 1fr; }
-          .header { flex-direction: column; align-items: flex-start; }
-        }
+      </style>
+    </head>
+    <body>
+      <div class="login-card">
+        <div class="login-header">
+          <h1>🔐 Admin Panel</h1>
+          <p>Aternos Bot PRO</p>
+        </div>
+        ${req.query.error ? '<div class="error">❌ Kullanıcı adı veya şifre hatalı!</div>' : ''}
+        <form action="/login" method="POST">
+          <div class="form-group">
+            <label>👤 Kullanıcı Adı</label>
+            <input type="text" name="username" required autofocus>
+          </div>
+          <div class="form-group">
+            <label>🔑 Şifre</label>
+            <input type="password" name="password" required>
+          </div>
+          <button type="submit" class="btn">🚀 Giriş Yap</button>
+        </form>
+      </div>
+    </body>
+    </html>
+  `);
+});
+
+// Login POST
+app.post('/login', (req, res) => {
+  const { username, password } = req.body;
+  
+  if (username === ADMIN.username && password === ADMIN.password) {
+    req.session.authenticated = true;
+    req.session.username = username;
+    res.redirect('/');
+  } else {
+    res.redirect('/login?error=1');
+  }
+});
+
+// Logout
+app.get('/logout', (req, res) => {
+  req.session.destroy();
+  res.redirect('/login');
+});
+
+// Ana Dashboard
+app.get('/', requireAuth, (req, res) => {
+  const serverCount = Object.keys(servers).length;
+  const totalBots = Object.keys(bots).length;
+  const activeBots = Object.values(bots).filter(b => b.bot).length;
+  
+  res.send(`
+    <!DOCTYPE html>
+    <html lang="tr">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Dashboard - Aternos Bot PRO</title>
+      <style>
+        ${getStyles()}
       </style>
     </head>
     <body>
@@ -265,143 +203,30 @@ app.get('/', (req, res) => {
         <div class="header">
           <div>
             <h1>🤖 Aternos Bot PRO</h1>
-            <p style="color: #6b7280; margin-top: 5px;">Uptime: ${hours}s ${minutes}d ${seconds}sn</p>
+            <p style="color: #6b7280; margin-top: 5px;">Hoş geldin, ${req.session.username}</p>
           </div>
           <div class="header-stats">
-            <span class="stat-badge badge-primary">📊 Toplam: ${globalStats.totalBots}</span>
-            <span class="stat-badge badge-success">🟢 Aktif: ${activeBots}</span>
-            <span class="stat-badge badge-warning">🟡 Bağlanıyor: ${connectingBots}</span>
-            <span class="stat-badge badge-danger">🔴 Offline: ${globalStats.totalBots - activeBots - connectingBots}</span>
+            <span class="stat-badge badge-primary">🖥️ Sunucu: ${serverCount}</span>
+            <span class="stat-badge badge-success">🤖 Bot: ${totalBots}</span>
+            <span class="stat-badge badge-warning">🟢 Aktif: ${activeBots}</span>
+            <a href="/logout" class="btn btn-danger btn-small">🚪 Çıkış</a>
           </div>
-        </div>
-        
-        <div class="alert alert-info">
-          💡 <strong>Pro İpucu:</strong> RAM optimizasyonu için max ${config.maxConcurrentBots} bot çalışıyor. 
-          Mevcut RAM: ~${Math.round((activeBots * 100 + 50))} MB
         </div>
         
         <div class="tabs">
-          <button class="tab active" onclick="window.location.href='/'">🏠 Dashboard</button>
-          <button class="tab" onclick="window.location.href='/servers'">🖥️ Sunucular</button>
+          <button class="tab active" onclick="window.location.href='/'">🏠 Sunucular</button>
           <button class="tab" onclick="window.location.href='/settings'">⚙️ Ayarlar</button>
-          <button class="tab" onclick="window.location.href='/analytics'">📈 Analitik</button>
+          <button class="tab" onclick="window.location.href='/analytics'">📈 İstatistikler</button>
         </div>
         
-        <div class="card" style="margin-bottom: 20px;">
-          <h2>🎛️ Hızlı Kontrol</h2>
-          <form action="/api/start-all" method="POST" style="display: inline;">
-            <button type="submit" class="btn btn-success">▶️ Tümünü Başlat</button>
-          </form>
-          <form action="/api/stop-all" method="POST" style="display: inline;">
-            <button type="submit" class="btn btn-danger">⏹️ Tümünü Durdur</button>
-          </form>
-          <form action="/api/restart-all" method="POST" style="display: inline;">
-            <button type="submit" class="btn btn-warning">🔄 Tümünü Yeniden Başlat</button>
-          </form>
-          <form action="/api/add-bot" method="POST" style="display: inline;">
-            <button type="submit" class="btn btn-primary" ${activeBots >= config.maxConcurrentBots ? 'disabled' : ''}>
-              ➕ Yeni Bot Ekle (${activeBots}/${config.maxConcurrentBots})
-            </button>
-          </form>
-        </div>
-        
-        <h2 style="color: white; margin-bottom: 15px; font-size: 24px;">🤖 Aktif Botlar</h2>
-        
-        ${Object.keys(bots).length === 0 ? `
-          <div class="card">
-            <p style="text-align: center; color: #6b7280; padding: 40px 0;">
-              Bot yok. Yukarıdan "Yeni Bot Ekle" butonuna basın.
-            </p>
+        ${serverCount === 0 ? `
+          <div class="alert alert-info">
+            💡 <strong>Başlamak için:</strong> Aşağıdan "Yeni Sunucu Ekle" butonuna tıklayın!
           </div>
         ` : ''}
         
         <div class="grid">
-          ${Object.entries(bots).map(([botId, botData]) => {
-            const isOnline = botData.bot ? true : false;
-            const isConnecting = botData.isConnecting;
-            const stats = botData.stats;
-            
-            return `
-              <div class="card bot-card ${isOnline ? 'online' : (isConnecting ? 'connecting' : 'offline')}">
-                <div class="bot-header">
-                  <div>
-                    <span class="bot-status ${isOnline ? 'status-online' : (isConnecting ? 'status-connecting' : 'status-offline')}"></span>
-                    <strong>${stats.username || 'Bot #' + botId}</strong>
-                  </div>
-                  <div>
-                    <form action="/api/remove-bot/${botId}" method="POST" style="display: inline;">
-                      <button type="submit" class="btn btn-danger btn-small">🗑️</button>
-                    </form>
-                  </div>
-                </div>
-                <div class="stat">
-                  <span class="stat-label">Sunucu</span>
-                  <span class="stat-value">${botData.config.serverName}</span>
-                </div>
-                <div class="stat">
-                  <span class="stat-label">Host</span>
-                  <span class="stat-value">${botData.config.host}</span>
-                </div>
-                <div class="stat">
-                  <span class="stat-label">Durum</span>
-                  <span class="stat-value">${isOnline ? '🟢 Online' : (isConnecting ? '🟡 Bağlanıyor' : '🔴 Offline')}</span>
-                </div>
-                <div class="stat">
-                  <span class="stat-label">Bağlantı</span>
-                  <span class="stat-value">${stats.connections}</span>
-                </div>
-                <div class="stat">
-                  <span class="stat-label">Başarılı</span>
-                  <span class="stat-value">${stats.successes}</span>
-                </div>
-                <div class="stat">
-                  <span class="stat-label">Hata</span>
-                  <span class="stat-value">${stats.errors}</span>
-                </div>
-              </div>
-            `;
-          }).join('')}
-        </div>
-        
-      </div>
-      
-      <script>
-        // Otomatik yenileme
-        setTimeout(() => location.reload(), 5000);
-      </script>
-    </body>
-    </html>
-  `);
-});
-
-// Sunucular Sayfası
-app.get('/servers', (req, res) => {
-  res.send(`
-    <!DOCTYPE html>
-    <html lang="tr">
-    <head>
-      <meta charset="UTF-8">
-      <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>Sunucular - Aternos Bot PRO</title>
-      <style>
-        ${getCommonStyles()}
-      </style>
-    </head>
-    <body>
-      <div class="container">
-        <div class="header">
-          <h1>🖥️ Sunucu Yönetimi</h1>
-        </div>
-        
-        <div class="tabs">
-          <button class="tab" onclick="window.location.href='/'">🏠 Dashboard</button>
-          <button class="tab active" onclick="window.location.href='/servers'">🖥️ Sunucular</button>
-          <button class="tab" onclick="window.location.href='/settings'">⚙️ Ayarlar</button>
-          <button class="tab" onclick="window.location.href='/analytics'">📈 Analitik</button>
-        </div>
-        
-        <div class="grid">
-          <div class="card">
+          <div class="card add-server-card">
             <h2>➕ Yeni Sunucu Ekle</h2>
             <form action="/api/add-server" method="POST">
               <div class="form-group">
@@ -430,31 +255,184 @@ app.get('/servers', (req, res) => {
             </form>
           </div>
           
-          <div class="card">
-            <h2>📋 Kayıtlı Sunucular</h2>
-            <div class="server-list">
-              ${servers.map((server, i) => `
-                <div class="server-item">
-                  <div class="server-info">
-                    <h3>${server.name}</h3>
-                    <p>${server.host}:${server.port} • ${server.version}</p>
+          ${Object.entries(servers).map(([serverId, server]) => {
+            const serverBots = Object.values(bots).filter(b => b.serverId === serverId);
+            const activeBots = serverBots.filter(b => b.bot).length;
+            const connectingBots = serverBots.filter(b => b.isConnecting).length;
+            
+            return `
+              <div class="card server-card">
+                <div class="server-header">
+                  <div>
+                    <h2>🖥️ ${server.name}</h2>
+                    <p class="server-info">${server.host}:${server.port}</p>
+                    <p class="server-info">Versiyon: ${server.version}</p>
                   </div>
-                  <form action="/api/remove-server/${i}" method="POST" style="display: inline;">
-                    <button type="submit" class="btn btn-danger btn-small">🗑️ Sil</button>
+                  <form action="/api/remove-server/${serverId}" method="POST" style="display: inline;">
+                    <button type="submit" class="btn btn-danger btn-small" onclick="return confirm('Sunucuyu silmek istediğinize emin misiniz?')">🗑️</button>
                   </form>
                 </div>
-              `).join('')}
-            </div>
-          </div>
+                
+                <div class="bot-counter">
+                  <span class="bot-count ${serverBots.length >= config.maxBotsPerServer ? 'bot-count-full' : ''}">
+                    ${serverBots.length} / ${config.maxBotsPerServer} Bot
+                  </span>
+                  <div class="bot-status-mini">
+                    <span class="status-dot status-online"></span> ${activeBots}
+                    <span class="status-dot status-connecting"></span> ${connectingBots}
+                    <span class="status-dot status-offline"></span> ${serverBots.length - activeBots - connectingBots}
+                  </div>
+                </div>
+                
+                <div class="bot-actions">
+                  <form action="/api/add-bot/${serverId}" method="POST" style="display: inline;">
+                    <button type="submit" class="btn btn-success btn-small" ${serverBots.length >= config.maxBotsPerServer ? 'disabled' : ''}>
+                      ➕ Bot Ekle
+                    </button>
+                  </form>
+                  <button onclick="window.location.href='/server/${serverId}'" class="btn btn-primary btn-small">
+                    📋 Detay
+                  </button>
+                </div>
+                
+                ${serverBots.length > 0 ? `
+                  <div class="bot-mini-list">
+                    ${serverBots.slice(0, 3).map(bot => {
+                      const status = bot.bot ? 'online' : (bot.isConnecting ? 'connecting' : 'offline');
+                      return `
+                        <div class="bot-mini-item">
+                          <span class="status-dot status-${status}"></span>
+                          <span>${bot.stats.username || 'Loading...'}</span>
+                        </div>
+                      `;
+                    }).join('')}
+                    ${serverBots.length > 3 ? `<div class="bot-mini-item">+${serverBots.length - 3} bot daha</div>` : ''}
+                  </div>
+                ` : ''}
+              </div>
+            `;
+          }).join('')}
         </div>
       </div>
+      
+      <script>
+        setTimeout(() => location.reload(), 5000);
+      </script>
+    </body>
+    </html>
+  `);
+});
+
+// Sunucu Detay Sayfası
+app.get('/server/:serverId', requireAuth, (req, res) => {
+  const serverId = req.params.serverId;
+  const server = servers[serverId];
+  
+  if (!server) {
+    return res.redirect('/');
+  }
+  
+  const serverBots = Object.entries(bots).filter(([_, b]) => b.serverId === serverId);
+  
+  res.send(`
+    <!DOCTYPE html>
+    <html lang="tr">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>${server.name} - Aternos Bot PRO</title>
+      <style>
+        ${getStyles()}
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <div>
+            <h1>🖥️ ${server.name}</h1>
+            <p style="color: #6b7280; margin-top: 5px;">${server.host}:${server.port} • ${server.version}</p>
+          </div>
+          <button onclick="window.location.href='/'" class="btn btn-secondary">← Geri Dön</button>
+        </div>
+        
+        <div class="card" style="margin-bottom: 20px;">
+          <h2>🎛️ Sunucu Kontrolü</h2>
+          <form action="/api/add-bot/${serverId}" method="POST" style="display: inline;">
+            <button type="submit" class="btn btn-success" ${serverBots.length >= config.maxBotsPerServer ? 'disabled' : ''}>
+              ➕ Yeni Bot Ekle (${serverBots.length}/${config.maxBotsPerServer})
+            </button>
+          </form>
+          <form action="/api/stop-all-bots/${serverId}" method="POST" style="display: inline;">
+            <button type="submit" class="btn btn-danger">⏹️ Tüm Botları Durdur</button>
+          </form>
+          <form action="/api/restart-all-bots/${serverId}" method="POST" style="display: inline;">
+            <button type="submit" class="btn btn-warning">🔄 Tüm Botları Yeniden Başlat</button>
+          </form>
+        </div>
+        
+        <h2 style="color: white; margin-bottom: 15px;">🤖 Aktif Botlar</h2>
+        
+        ${serverBots.length === 0 ? `
+          <div class="card">
+            <p style="text-align: center; color: #6b7280; padding: 40px 0;">
+              Bu sunucuda henüz bot yok. Yukarıdan "Yeni Bot Ekle" butonuna basın.
+            </p>
+          </div>
+        ` : ''}
+        
+        <div class="grid">
+          ${serverBots.map(([botId, botData]) => {
+            const isOnline = botData.bot ? true : false;
+            const isConnecting = botData.isConnecting;
+            const stats = botData.stats;
+            
+            return `
+              <div class="card bot-card ${isOnline ? 'online' : (isConnecting ? 'connecting' : 'offline')}">
+                <div class="bot-header">
+                  <div>
+                    <span class="bot-status ${isOnline ? 'status-online' : (isConnecting ? 'status-connecting' : 'status-offline')}"></span>
+                    <strong>${stats.username || 'Bot #' + botId.substr(-8)}</strong>
+                  </div>
+                  <form action="/api/remove-bot/${botId}" method="POST" style="display: inline;">
+                    <button type="submit" class="btn btn-danger btn-small" onclick="return confirm('Botu silmek istediğinize emin misiniz?')">🗑️</button>
+                  </form>
+                </div>
+                <div class="stat">
+                  <span class="stat-label">Durum</span>
+                  <span class="stat-value">${isOnline ? '🟢 Online' : (isConnecting ? '🟡 Bağlanıyor' : '🔴 Offline')}</span>
+                </div>
+                <div class="stat">
+                  <span class="stat-label">Toplam Bağlantı</span>
+                  <span class="stat-value">${stats.connections}</span>
+                </div>
+                <div class="stat">
+                  <span class="stat-label">Başarılı Giriş</span>
+                  <span class="stat-value">${stats.successes}</span>
+                </div>
+                <div class="stat">
+                  <span class="stat-label">Hata Sayısı</span>
+                  <span class="stat-value">${stats.errors}</span>
+                </div>
+                <div class="stat">
+                  <span class="stat-label">Kick Sayısı</span>
+                  <span class="stat-value">${stats.kicks}</span>
+                </div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      </div>
+      
+      <script>
+        setTimeout(() => location.reload(), 5000);
+      </script>
     </body>
     </html>
   `);
 });
 
 // Ayarlar Sayfası
-app.get('/settings', (req, res) => {
+app.get('/settings', requireAuth, (req, res) => {
   res.send(`
     <!DOCTYPE html>
     <html lang="tr">
@@ -463,7 +441,7 @@ app.get('/settings', (req, res) => {
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
       <title>Ayarlar - Aternos Bot PRO</title>
       <style>
-        ${getCommonStyles()}
+        ${getStyles()}
       </style>
     </head>
     <body>
@@ -473,10 +451,9 @@ app.get('/settings', (req, res) => {
         </div>
         
         <div class="tabs">
-          <button class="tab" onclick="window.location.href='/'">🏠 Dashboard</button>
-          <button class="tab" onclick="window.location.href='/servers'">🖥️ Sunucular</button>
+          <button class="tab" onclick="window.location.href='/'">🏠 Sunucular</button>
           <button class="tab active" onclick="window.location.href='/settings'">⚙️ Ayarlar</button>
-          <button class="tab" onclick="window.location.href='/analytics'">📈 Analitik</button>
+          <button class="tab" onclick="window.location.href='/analytics'">📈 İstatistikler</button>
         </div>
         
         <div class="grid">
@@ -504,22 +481,22 @@ app.get('/settings', (req, res) => {
           </div>
           
           <div class="card">
-            <h2>🚀 Performans Ayarları</h2>
-            <form action="/api/update-performance" method="POST">
+            <h2>🚀 Bot Ayarları</h2>
+            <form action="/api/update-bot-config" method="POST">
               <div class="form-group">
-                <label>Max Eşzamanlı Bot Sayısı</label>
-                <input type="number" name="maxConcurrentBots" value="${config.maxConcurrentBots}" min="1" max="10" required>
+                <label>Sunucu Başına Max Bot</label>
+                <input type="number" name="maxBotsPerServer" value="${config.maxBotsPerServer}" min="1" max="20" required>
                 <small style="color: #6b7280; display: block; margin-top: 5px;">
-                  Tahmini RAM: ~${config.maxConcurrentBots * 100 + 50} MB
+                  Önerilen: Aternos 1GB için 1-2, 2GB için 3-4 bot
                 </small>
               </div>
-              <div class="form-group" style="display: flex; align-items: center; gap: 10px;">
+              <div class="form-group checkbox-group">
                 <input type="checkbox" name="enableMovement" ${config.enableMovement ? 'checked' : ''}>
-                <label style="margin: 0;">Hareket Simülasyonu</label>
+                <label>Hareket Simülasyonu (RAM kullanımını artırır)</label>
               </div>
-              <div class="form-group" style="display: flex; align-items: center; gap: 10px;">
+              <div class="form-group checkbox-group">
                 <input type="checkbox" name="autoReconnect" ${config.autoReconnect ? 'checked' : ''}>
-                <label style="margin: 0;">Otomatik Yeniden Bağlan</label>
+                <label>Otomatik Yeniden Bağlan</label>
               </div>
               <button type="submit" class="btn btn-primary">💾 Kaydet</button>
             </form>
@@ -531,43 +508,47 @@ app.get('/settings', (req, res) => {
   `);
 });
 
-// Analitik Sayfası
-app.get('/analytics', (req, res) => {
+// İstatistikler Sayfası
+app.get('/analytics', requireAuth, (req, res) => {
+  const totalBots = Object.keys(bots).length;
   const totalConnections = Object.values(bots).reduce((sum, b) => sum + b.stats.connections, 0);
   const totalSuccesses = Object.values(bots).reduce((sum, b) => sum + b.stats.successes, 0);
   const totalErrors = Object.values(bots).reduce((sum, b) => sum + b.stats.errors, 0);
   const successRate = totalConnections > 0 ? Math.round((totalSuccesses / totalConnections) * 100) : 0;
-
+  
   res.send(`
     <!DOCTYPE html>
     <html lang="tr">
     <head>
       <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>Analitik - Aternos Bot PRO</title>
+      <title>İstatistikler - Aternos Bot PRO</title>
       <style>
-        ${getCommonStyles()}
+        ${getStyles()}
       </style>
     </head>
     <body>
       <div class="container">
         <div class="header">
-          <h1>📈 Analitik & İstatistikler</h1>
+          <h1>📈 İstatistikler</h1>
         </div>
         
         <div class="tabs">
-          <button class="tab" onclick="window.location.href='/'">🏠 Dashboard</button>
-          <button class="tab" onclick="window.location.href='/servers'">🖥️ Sunucular</button>
+          <button class="tab" onclick="window.location.href='/'">🏠 Sunucular</button>
           <button class="tab" onclick="window.location.href='/settings'">⚙️ Ayarlar</button>
-          <button class="tab active" onclick="window.location.href='/analytics'">📈 Analitik</button>
+          <button class="tab active" onclick="window.location.href='/analytics'">📈 İstatistikler</button>
         </div>
         
         <div class="grid">
           <div class="card">
             <h2>📊 Genel İstatistikler</h2>
             <div class="stat">
+              <span class="stat-label">Toplam Sunucu</span>
+              <span class="stat-value">${Object.keys(servers).length}</span>
+            </div>
+            <div class="stat">
               <span class="stat-label">Toplam Bot</span>
-              <span class="stat-value">${Object.keys(bots).length}</span>
+              <span class="stat-value">${totalBots}</span>
             </div>
             <div class="stat">
               <span class="stat-label">Toplam Bağlantı</span>
@@ -591,23 +572,18 @@ app.get('/analytics', (req, res) => {
           </div>
           
           <div class="card">
-            <h2>💾 Sistem Bilgileri</h2>
-            <div class="stat">
-              <span class="stat-label">Node.js Versiyonu</span>
-              <span class="stat-value">${process.version}</span>
-            </div>
-            <div class="stat">
-              <span class="stat-label">Platform</span>
-              <span class="stat-value">${process.platform}</span>
-            </div>
-            <div class="stat">
-              <span class="stat-label">Tahmini RAM</span>
-              <span class="stat-value">~${Math.round(process.memoryUsage().heapUsed / 1024 / 1024)} MB</span>
-            </div>
-            <div class="stat">
-              <span class="stat-label">Uptime</span>
-              <span class="stat-value">${Math.floor(process.uptime() / 60)} dakika</span>
-            </div>
+            <h2>🖥️ Sunucu Bazlı İstatistikler</h2>
+            ${Object.entries(servers).map(([serverId, server]) => {
+              const serverBots = Object.values(bots).filter(b => b.serverId === serverId);
+              const serverActive = serverBots.filter(b => b.bot).length;
+              
+              return `
+                <div class="stat">
+                  <span class="stat-label">${server.name}</span>
+                  <span class="stat-value">${serverBots.length} bot (${serverActive} aktif)</span>
+                </div>
+              `;
+            }).join('')}
           </div>
         </div>
       </div>
@@ -617,111 +593,125 @@ app.get('/analytics', (req, res) => {
 });
 
 // API Endpoints
-app.post('/api/start-all', (req, res) => {
-  servers.filter(s => s.enabled).forEach((server, i) => {
-    if (Object.keys(bots).length < config.maxConcurrentBots) {
-      createBotForServer(server);
-    }
-  });
-  res.redirect('/');
-});
-
-app.post('/api/stop-all', (req, res) => {
-  Object.keys(bots).forEach(botId => {
-    cleanupBot(botId);
-  });
-  res.redirect('/');
-});
-
-app.post('/api/restart-all', (req, res) => {
-  Object.keys(bots).forEach(botId => {
-    cleanupBot(botId);
-  });
-  setTimeout(() => {
-    servers.filter(s => s.enabled).forEach((server, i) => {
-      if (Object.keys(bots).length < config.maxConcurrentBots) {
-        createBotForServer(server);
-      }
-    });
-  }, 2000);
-  res.redirect('/');
-});
-
-app.post('/api/add-bot', (req, res) => {
-  if (Object.keys(bots).length < config.maxConcurrentBots && servers.length > 0) {
-    const randomServer = servers[Math.floor(Math.random() * servers.length)];
-    createBotForServer(randomServer);
-  }
-  res.redirect('/');
-});
-
-app.post('/api/remove-bot/:botId', (req, res) => {
-  cleanupBot(req.params.botId);
-  delete bots[req.params.botId];
-  globalStats.totalBots--;
-  res.redirect('/');
-});
-
-app.post('/api/add-server', (req, res) => {
-  servers.push({
-    id: 'server' + Date.now(),
+app.post('/api/add-server', requireAuth, (req, res) => {
+  const serverId = 'server_' + Date.now();
+  servers[serverId] = {
     name: req.body.name,
     host: req.body.host,
     port: parseInt(req.body.port),
     version: req.body.version,
-    enabled: true
+    bots: []
+  };
+  console.log('✅ Sunucu eklendi:', servers[serverId].name);
+  res.redirect('/');
+});
+
+app.post('/api/remove-server/:serverId', requireAuth, (req, res) => {
+  const serverId = req.params.serverId;
+  
+  // Sunucudaki tüm botları durdur
+  Object.entries(bots).forEach(([botId, bot]) => {
+    if (bot.serverId === serverId) {
+      cleanupBot(botId);
+      delete bots[botId];
+    }
   });
-  res.redirect('/servers');
+  
+  delete servers[serverId];
+  console.log('🗑️ Sunucu silindi:', serverId);
+  res.redirect('/');
 });
 
-app.post('/api/remove-server/:index', (req, res) => {
-  servers.splice(parseInt(req.params.index), 1);
-  res.redirect('/servers');
+app.post('/api/add-bot/:serverId', requireAuth, (req, res) => {
+  const serverId = req.params.serverId;
+  const server = servers[serverId];
+  
+  if (!server) {
+    return res.redirect('/');
+  }
+  
+  const serverBots = Object.values(bots).filter(b => b.serverId === serverId);
+  
+  if (serverBots.length >= config.maxBotsPerServer) {
+    return res.redirect(`/server/${serverId}`);
+  }
+  
+  createBotForServer(serverId);
+  res.redirect(`/server/${serverId}`);
 });
 
-app.post('/api/update-config', (req, res) => {
+app.post('/api/remove-bot/:botId', requireAuth, (req, res) => {
+  const botId = req.params.botId;
+  const serverId = bots[botId] ? bots[botId].serverId : null;
+  
+  cleanupBot(botId);
+  delete bots[botId];
+  
+  console.log('🗑️ Bot silindi:', botId);
+  
+  if (serverId) {
+    res.redirect(`/server/${serverId}`);
+  } else {
+    res.redirect('/');
+  }
+});
+
+app.post('/api/stop-all-bots/:serverId', requireAuth, (req, res) => {
+  const serverId = req.params.serverId;
+  
+  Object.entries(bots).forEach(([botId, bot]) => {
+    if (bot.serverId === serverId) {
+      cleanupBot(botId);
+    }
+  });
+  
+  res.redirect(`/server/${serverId}`);
+});
+
+app.post('/api/restart-all-bots/:serverId', requireAuth, (req, res) => {
+  const serverId = req.params.serverId;
+  const serverBots = Object.entries(bots).filter(([_, b]) => b.serverId === serverId);
+  
+  serverBots.forEach(([botId]) => {
+    cleanupBot(botId);
+    setTimeout(() => connectBot(botId), 2000);
+  });
+  
+  res.redirect(`/server/${serverId}`);
+});
+
+app.post('/api/update-config', requireAuth, (req, res) => {
   config.minStayTime = parseInt(req.body.minStayTime);
   config.maxStayTime = parseInt(req.body.maxStayTime);
   config.minWaitTime = parseInt(req.body.minWaitTime);
   config.maxWaitTime = parseInt(req.body.maxWaitTime);
+  console.log('⚙️ Zaman ayarları güncellendi');
   res.redirect('/settings');
 });
 
-app.post('/api/update-performance', (req, res) => {
-  config.maxConcurrentBots = parseInt(req.body.maxConcurrentBots);
+app.post('/api/update-bot-config', requireAuth, (req, res) => {
+  config.maxBotsPerServer = parseInt(req.body.maxBotsPerServer);
   config.enableMovement = req.body.enableMovement === 'on';
   config.autoReconnect = req.body.autoReconnect === 'on';
+  console.log('⚙️ Bot ayarları güncellendi');
   res.redirect('/settings');
-});
-
-app.get('/api/status', (req, res) => {
-  res.json({
-    bots: Object.keys(bots).map(id => ({
-      id,
-      online: bots[id].bot ? true : false,
-      connecting: bots[id].isConnecting,
-      stats: bots[id].stats
-    })),
-    globalStats,
-    config,
-    servers
-  });
 });
 
 app.listen(PORT, () => {
   console.log('🌐 Dashboard: http://localhost:' + PORT);
-  console.log('🚀 Aternos Bot PRO başlatıldı');
+  console.log('👤 Kullanıcı:', ADMIN.username);
+  console.log('🔑 Şifre:', ADMIN.password);
+  console.log('⚠️ ÖNEMLİ: Şifreyi değiştir!');
 });
 
-// Bot Yönetim Fonksiyonları
+// Bot Fonksiyonları
 function getRandomUsername() {
   const prefixes = ['Dark','Shadow','Fire','Ice','Thunder','Storm','Night','Blood','Soul','Ghost','Dragon','Wolf','Tiger','Lion','Eagle','Hawk','Raven','Phoenix','Demon','Angel','King','Queen','Lord','Master','Legend','Epic','Super','Ultra','Mega','Hyper','Pro','Ace','Elite','Prime','Alpha','Beta','Omega','Nova','Star','Sky','Moon','Sun','Light','Void','Frost','Flame','Aqua','Terra','Aero','Metal'];
   const suffixes = ['Slayer','Killer','Hunter','Destroyer','Breaker','Crusher','Reaper','Striker','Warrior','Knight','Guardian','Champion','Hero','Legend','Master','Lord','King','Dragon','Wolf','Tiger','Bear','Eagle','Blade','Sword','Rider','Walker','Runner','Miner','Builder','Crafter','Gamer','Player'];
   const styles = [
     () => prefixes[Math.floor(Math.random() * prefixes.length)] + suffixes[Math.floor(Math.random() * suffixes.length)] + Math.floor(Math.random() * 9999),
     () => prefixes[Math.floor(Math.random() * prefixes.length)] + Math.floor(Math.random() * 999) + suffixes[Math.floor(Math.random() * suffixes.length)],
-    () => 'xX_' + prefixes[Math.floor(Math.random() * prefixes.length)] + suffixes[Math.floor(Math.random() * suffixes.length)] + '_Xx',
-    () => prefixes[Math.floor(Math.random() * prefixes.length)] + '_' + suffixes[Math.floor(Math.random() * suffixes.length)] + '_' + Math.floor(Math.random() * 999)
+    () => 'xX_' + prefixes[Math.floor(Math.random() * prefixes.length)] + suffixes[Math.floor(Math.random() * suffixes.length)] + '_Xx'
   ];
   let u = styles[Math.floor(Math.random() * styles.length)]();
   return u.length > 16 ? u.substring(0, 16) : u;
@@ -748,26 +738,20 @@ function humanizeBot(botId) {
       setTimeout(() => bot.setControlState(dir, false), 1000 + Math.random() * 2000);
     }
     
-    if (Math.random() < 0.1) {
-      Object.keys(bot.controlState).forEach(k => bot.setControlState(k, false));
-    }
-    
     setTimeout(() => humanizeBot(botId), 2000 + Math.random() * 3000);
   } catch (e) {}
 }
 
-function createBotForServer(server) {
+function createBotForServer(serverId) {
+  const server = servers[serverId];
+  if (!server) return;
+  
   const botId = 'bot_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
   
   bots[botId] = {
     bot: null,
     isConnecting: false,
-    config: {
-      serverName: server.name,
-      host: server.host,
-      port: server.port,
-      version: server.version
-    },
+    serverId: serverId,
     stats: {
       username: null,
       connections: 0,
@@ -777,57 +761,57 @@ function createBotForServer(server) {
     }
   };
   
-  globalStats.totalBots++;
   connectBot(botId);
 }
 
 function connectBot(botId) {
   if (!bots[botId] || bots[botId].bot || bots[botId].isConnecting) return;
   
+  const server = servers[bots[botId].serverId];
+  if (!server) return;
+  
   bots[botId].isConnecting = true;
   bots[botId].stats.connections++;
-  globalStats.totalConnections++;
   
   const username = getRandomUsername();
   bots[botId].stats.username = username;
   
-  console.log(`🤖 [${botId}] Bağlanıyor:`, username);
+  console.log(`🤖 [${botId.substr(-8)}] Bağlanıyor:`, username, '→', server.name);
   
   try {
     const bot = mineflayer.createBot({
-      host: bots[botId].config.host,
-      port: bots[botId].config.port,
+      host: server.host,
+      port: server.port,
       username,
-      version: bots[botId].config.version,
+      version: server.version,
       auth: 'offline',
-      hideErrors: true, // Hataları gizle (log temizliği)
-      checkTimeoutInterval: 60000, // 60 saniye
+      hideErrors: true,
+      checkTimeoutInterval: 60000,
       keepAlive: true,
-      viewDistance: 'tiny', // RAM optimizasyonu
-      connectTimeout: 120000 // 2 dakika bağlantı timeout
+      viewDistance: 'tiny',
+      connectTimeout: 120000
     });
     
     bots[botId].bot = bot;
     
     const timeout = setTimeout(() => {
-      console.log(`⏱️ [${botId}] Timeout - Sunucu yanıt vermiyor`);
+      console.log(`⏱️ [${botId.substr(-8)}] Timeout`);
       bots[botId].stats.errors++;
-      globalStats.totalErrors++;
       reconnectBot(botId);
-    }, 120000); // 2 dakika timeout (Aternos için daha uzun)
+    }, 120000);
     
     bot.once('login', () => {
       clearTimeout(timeout);
       bots[botId].isConnecting = false;
       bots[botId].stats.successes++;
-      console.log(`✅ [${botId}] Giriş:`, username);
+      console.log(`✅ [${botId.substr(-8)}] Giriş:`, username);
       
       const stay = config.minStayTime * 1000 + Math.random() * (config.maxStayTime - config.minStayTime) * 1000;
       
       if (config.enableMovement) humanizeBot(botId);
       
       setTimeout(() => {
-        console.log(`👋 [${botId}] Çıkış`);
+        console.log(`👋 [${botId.substr(-8)}] Çıkış`);
         if (bots[botId] && bots[botId].bot) {
           try { bot.end(); } catch {}
         }
@@ -836,28 +820,27 @@ function connectBot(botId) {
     
     bot.on('end', () => {
       clearTimeout(timeout);
-      console.log(`❌ [${botId}] Kesildi`);
+      console.log(`❌ [${botId.substr(-8)}] Bağlantı kesildi`);
       reconnectBot(botId);
     });
     
     bot.on('kicked', (reason) => {
       clearTimeout(timeout);
       bots[botId].stats.kicks++;
-      console.log(`⚠️ [${botId}] Kick:`, reason);
+      console.log(`⚠️ [${botId.substr(-8)}] Kick:`, reason);
       reconnectBot(botId);
     });
     
     bot.on('error', (err) => {
       clearTimeout(timeout);
       bots[botId].stats.errors++;
-      globalStats.totalErrors++;
-      console.log(`⚠️ [${botId}] Hata:`, err.code || err.message);
+      console.log(`⚠️ [${botId.substr(-8)}] Hata:`, err.code || err.message);
       reconnectBot(botId);
     });
     
   } catch (err) {
     bots[botId].stats.errors++;
-    console.log(`⚠️ [${botId}] Bot hatası:`, err.message);
+    console.log(`⚠️ [${botId.substr(-8)}] Bot hatası:`, err.message);
     reconnectBot(botId);
   }
 }
@@ -888,43 +871,76 @@ function cleanupBot(botId) {
   }
 }
 
-function getCommonStyles() {
+function getStyles() {
   return `
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; padding: 20px; }
     .container { max-width: 1400px; margin: 0 auto; }
-    .header { background: white; padding: 30px; border-radius: 15px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); margin-bottom: 20px; }
-    .header h1 { color: #667eea; }
+    .header { background: white; padding: 30px; border-radius: 15px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 20px; }
+    .header h1 { color: #667eea; font-size: 28px; }
+    .header-stats { display: flex; gap: 15px; flex-wrap: wrap; align-items: center; }
+    .stat-badge { padding: 10px 20px; border-radius: 20px; font-weight: bold; font-size: 14px; }
+    .badge-primary { background: #667eea; color: white; }
+    .badge-success { background: #10b981; color: white; }
+    .badge-warning { background: #f59e0b; color: white; }
+    .badge-danger { background: #ef4444; color: white; }
     .tabs { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; }
     .tab { padding: 12px 25px; background: white; border: none; border-radius: 10px; font-weight: bold; cursor: pointer; box-shadow: 0 5px 15px rgba(0,0,0,0.1); transition: all 0.3s; }
     .tab:hover { transform: translateY(-2px); }
     .tab.active { background: #667eea; color: white; }
-    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); gap: 20px; margin-bottom: 20px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); gap: 20px; margin-bottom: 20px; }
     .card { background: white; padding: 25px; border-radius: 15px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); }
     .card h2 { color: #667eea; margin-bottom: 15px; font-size: 20px; }
+    .add-server-card { border: 2px dashed #667eea; }
+    .server-card { position: relative; }
+    .server-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 15px; }
+    .server-info { color: #6b7280; font-size: 14px; margin-top: 5px; }
+    .bot-counter { background: #f3f4f6; padding: 15px; border-radius: 8px; margin: 15px 0; display: flex; justify-content: space-between; align-items: center; }
+    .bot-count { font-weight: bold; font-size: 18px; color: #667eea; }
+    .bot-count-full { color: #ef4444; }
+    .bot-status-mini { display: flex; gap: 10px; align-items: center; font-size: 14px; }
+    .status-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; }
+    .status-online { background: #10b981; }
+    .status-connecting { background: #f59e0b; }
+    .status-offline { background: #ef4444; }
+    .bot-actions { display: flex; gap: 10px; margin-top: 15px; }
+    .bot-mini-list { margin-top: 15px; padding-top: 15px; border-top: 1px solid #e5e7eb; }
+    .bot-mini-item { padding: 8px 0; display: flex; align-items: center; gap: 10px; font-size: 14px; color: #374151; }
+    .bot-card { border-left: 4px solid #e5e7eb; }
+    .bot-card.online { border-left-color: #10b981; }
+    .bot-card.connecting { border-left-color: #f59e0b; }
+    .bot-card.offline { border-left-color: #ef4444; }
+    .bot-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
+    .bot-status { display: inline-block; width: 12px; height: 12px; border-radius: 50%; margin-right: 8px; }
     .form-group { margin-bottom: 20px; }
     .form-group label { display: block; margin-bottom: 8px; color: #374151; font-weight: 600; }
     .form-group input, .form-group select { width: 100%; padding: 12px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 14px; }
-    .btn { padding: 10px 20px; border: none; border-radius: 8px; font-size: 14px; font-weight: bold; cursor: pointer; transition: all 0.3s; margin-right: 8px; margin-bottom: 8px; }
+    .form-group input:focus, .form-group select:focus { outline: none; border-color: #667eea; }
+    .checkbox-group { display: flex; align-items: center; gap: 10px; }
+    .checkbox-group input[type="checkbox"] { width: auto; }
+    .btn { padding: 10px 20px; border: none; border-radius: 8px; font-size: 14px; font-weight: bold; cursor: pointer; transition: all 0.3s; }
+    .btn:hover { transform: translateY(-2px); box-shadow: 0 5px 15px rgba(0,0,0,0.2); }
     .btn-primary { background: #667eea; color: white; }
     .btn-success { background: #10b981; color: white; }
     .btn-danger { background: #ef4444; color: white; }
+    .btn-warning { background: #f59e0b; color: white; }
+    .btn-secondary { background: #6b7280; color: white; }
     .btn-small { padding: 6px 12px; font-size: 12px; }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
     .stat { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #e5e7eb; }
     .stat:last-child { border-bottom: none; }
     .stat-label { color: #6b7280; font-weight: 500; }
     .stat-value { color: #111827; font-weight: bold; }
-    .server-list { display: flex; flex-direction: column; gap: 10px; }
-    .server-item { background: #f9fafb; padding: 15px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center; }
-    .server-info h3 { color: #374151; margin-bottom: 5px; }
-    .server-info p { color: #6b7280; font-size: 13px; }
     .progress-bar { width: 100%; height: 8px; background: #e5e7eb; border-radius: 10px; overflow: hidden; margin-top: 10px; }
     .progress-fill { height: 100%; background: linear-gradient(90deg, #667eea, #764ba2); transition: width 0.3s; }
+    .alert { padding: 15px; border-radius: 8px; margin-bottom: 20px; }
+    .alert-info { background: #dbeafe; color: #1e40af; }
+    @media (max-width: 768px) { .grid { grid-template-columns: 1fr; } .header { flex-direction: column; align-items: flex-start; } }
   `;
 }
 
-console.log('🚀 Aternos Bot PRO başlatılıyor...');
-console.log('🌐 Dashboard: http://localhost:' + PORT);
+console.log('🚀 Aternos Bot PRO - Admin Panel');
+console.log('================================');
 
 process.on('SIGINT', () => {
   console.log('\n⛔ Kapatılıyor...');
