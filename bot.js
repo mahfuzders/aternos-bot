@@ -12,8 +12,9 @@ app.listen(PORT, () => {
     console.log('Web server hazır');
 });
 
-let bot;
+let bot = null;
 let isConnecting = false;
+let shouldReconnect = true;
 
 function getRandomUsername() {
     const prefixes = [
@@ -52,43 +53,36 @@ function getRandomUsername() {
 }
 
 function createBot() {
-    if (isConnecting) {
-        console.log('⚠️ Zaten bağlanıyor, bekle...');
+    // Zaten bot varsa veya bağlanıyorsa, yeni bot oluşturma
+    if (bot || isConnecting) {
+        console.log('⚠️ Bot zaten aktif, yeni bot oluşturulmuyor');
         return;
     }
     
     isConnecting = true;
-    
-    if (bot) {
-        try {
-            bot.removeAllListeners();
-            bot.end();
-        } catch (e) {}
-        bot = null;
-    }
-
     const username = getRandomUsername();
-    console.log('\n🤖 Yeni bot:', username);
+    console.log('\n🤖 Yeni bot oluşturuluyor:', username);
     
     try {
         bot = mineflayer.createBot({
             host: 'iamsofiathefirsttt.aternos.me',
             port: 25565,
             username: username,
-            version: '1.20.4', // VERSİYON DÜZELTİLDİ!
+            version: '1.20.4',
             auth: 'offline',
             hideErrors: false,
             checkTimeoutInterval: 30000,
             keepAlive: true
         });
 
+        // 60 saniye içinde bağlanamazsa timeout
         const connectionTimeout = setTimeout(() => {
-            console.log('⏱️ Bağlantı zaman aşımı...');
-            isConnecting = false;
-            if (bot) {
-                try { bot.end(); } catch (e) {}
-            }
-            setTimeout(() => createBot(), 30000);
+            console.log('⏱️ Bağlantı zaman aşımı');
+            cleanupBot();
+            // 30 saniye bekle, tekrar dene
+            setTimeout(() => {
+                if (shouldReconnect) createBot();
+            }, 30000);
         }, 60000);
 
         bot.once('login', () => {
@@ -96,12 +90,17 @@ function createBot() {
             isConnecting = false;
             console.log('✅ Giriş başarılı:', username);
             
+            // 1-2 dakika kal
             const stayTime = (60 + Math.floor(Math.random() * 60)) * 1000;
             console.log('⏱️ Kalma süresi:', Math.floor(stayTime / 1000), 'saniye');
             
             setTimeout(() => {
-                console.log('👋 Çıkıyor...');
-                try { bot.end(); } catch (e) {}
+                console.log('👋 Bot çıkıyor...');
+                if (bot) {
+                    try {
+                        bot.end();
+                    } catch (e) {}
+                }
             }, stayTime);
         });
 
@@ -111,56 +110,88 @@ function createBot() {
 
         bot.on('end', (reason) => {
             clearTimeout(connectionTimeout);
-            isConnecting = false;
             console.log('❌ Bağlantı kesildi:', reason || 'bilinmiyor');
             
-            const waitTime = (60 + Math.floor(Math.random() * 120)) * 1000;
-            console.log('⏳ Bekleme:', Math.floor(waitTime / 1000), 'saniye');
+            cleanupBot();
             
-            setTimeout(() => createBot(), waitTime);
+            // 1-3 dakika bekle, sonra yeni bot
+            const waitTime = (60 + Math.floor(Math.random() * 120)) * 1000;
+            console.log('⏳ Yeni bot:', Math.floor(waitTime / 1000), 'saniye sonra');
+            
+            setTimeout(() => {
+                if (shouldReconnect) createBot();
+            }, waitTime);
         });
 
         bot.on('kicked', (reason) => {
             clearTimeout(connectionTimeout);
-            isConnecting = false;
             console.log('⚠️ Kicklendi:', reason);
-            setTimeout(() => createBot(), 3 * 60 * 1000);
+            
+            cleanupBot();
+            
+            // 3 dakika bekle
+            setTimeout(() => {
+                if (shouldReconnect) createBot();
+            }, 3 * 60 * 1000);
         });
 
         bot.on('error', (err) => {
             clearTimeout(connectionTimeout);
-            isConnecting = false;
             
             if (err.code === 'ECONNREFUSED') {
-                console.log('⚠️ Sunucu kapalı, 2 dakika bekle...');
-                setTimeout(() => createBot(), 2 * 60 * 1000);
+                console.log('⚠️ Sunucu kapalı');
             } else if (err.code === 'ECONNRESET') {
-                console.log('⚠️ Bağlantı kesildi, 1 dakika bekle...');
-                setTimeout(() => createBot(), 60 * 1000);
+                console.log('⚠️ Bağlantı kesildi');
             } else {
                 console.log('⚠️ Hata:', err.message);
-                setTimeout(() => createBot(), 90 * 1000);
             }
+            
+            cleanupBot();
+            
+            // Hata türüne göre bekleme süresi
+            const waitTime = err.code === 'ECONNREFUSED' ? 2 * 60 * 1000 : 60 * 1000;
+            console.log('⏳ Yeniden deneme:', Math.floor(waitTime / 1000), 'saniye sonra');
+            
+            setTimeout(() => {
+                if (shouldReconnect) createBot();
+            }, waitTime);
         });
         
     } catch (err) {
-        isConnecting = false;
         console.log('⚠️ Bot oluşturma hatası:', err.message);
-        setTimeout(() => createBot(), 60 * 1000);
+        cleanupBot();
+        
+        setTimeout(() => {
+            if (shouldReconnect) createBot();
+        }, 60 * 1000);
     }
 }
 
-console.log('🚀 Bot başlatılıyor...');
-console.log('🎯 Sunucu: iamsofiathefirsttt.aternos.me');
-console.log('📦 Versiyon: 1.20.4\n');
+// Bot temizleme fonksiyonu
+function cleanupBot() {
+    isConnecting = false;
+    if (bot) {
+        try {
+            bot.removeAllListeners();
+            bot.end();
+        } catch (e) {}
+        bot = null;
+    }
+}
 
+console.log('🚀 Minecraft Bot Başlatılıyor...');
+console.log('🎯 Sunucu: iamsofiathefirsttt.aternos.me');
+console.log('📦 Versiyon: 1.20.4');
+console.log('🔄 Mod: Tek bot, sırayla giriş\n');
+
+// İlk botu başlat
 setTimeout(() => createBot(), 2000);
 
+// Temizlik
 process.on('SIGINT', () => {
     console.log('\n⛔ Kapatılıyor...');
-    if (bot) {
-        try { bot.end(); } catch (e) {}
-    }
+    shouldReconnect = false;
+    cleanupBot();
     process.exit();
 });
 
