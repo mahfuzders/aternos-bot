@@ -800,20 +800,21 @@ function connectBot(botId) {
       username,
       version: bots[botId].config.version,
       auth: 'offline',
-      hideErrors: false,
-      checkTimeoutInterval: 30000,
+      hideErrors: true, // Hataları gizle (log temizliği)
+      checkTimeoutInterval: 60000, // 60 saniye
       keepAlive: true,
-      viewDistance: 'tiny' // RAM optimizasyonu
+      viewDistance: 'tiny', // RAM optimizasyonu
+      connectTimeout: 120000 // 2 dakika bağlantı timeout
     });
     
     bots[botId].bot = bot;
     
     const timeout = setTimeout(() => {
-      console.log(`⏱️ [${botId}] Timeout`);
+      console.log(`⏱️ [${botId}] Timeout - Sunucu yanıt vermiyor`);
       bots[botId].stats.errors++;
       globalStats.totalErrors++;
       reconnectBot(botId);
-    }, 60000);
+    }, 120000); // 2 dakika timeout (Aternos için daha uzun)
     
     bot.once('login', () => {
       clearTimeout(timeout);
