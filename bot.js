@@ -1,5 +1,6 @@
 const mineflayer = require('mineflayer');
 const express = require('express');
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -17,134 +18,123 @@ let shouldReconnect = true;
 
 function getRandomUsername() {
   const prefixes = [
-    'Dark', 'Shadow', 'Fire', 'Ice', 'Thunder', 'Storm', 'Night', 'Blood',
-    'Soul', 'Ghost', 'Dragon', 'Wolf', 'Tiger', 'Lion', 'Eagle', 'Hawk',
-    'Raven', 'Phoenix', 'Demon', 'Angel', 'King', 'Queen', 'Lord', 'Master',
-    'Legend', 'Epic', 'Super', 'Ultra', 'Mega', 'Hyper', 'Pro', 'Ace',
-    'Elite', 'Prime', 'Alpha', 'Beta', 'Omega', 'Nova', 'Star', 'Sky',
-    'Moon', 'Sun', 'Light', 'Void', 'Frost', 'Flame', 'Aqua', 'Terra',
-    'Aero', 'Metal'
+    'Dark','Shadow','Fire','Ice','Thunder','Storm','Night','Blood','Soul','Ghost',
+    'Dragon','Wolf','Tiger','Lion','Eagle','Hawk','Raven','Phoenix','Demon','Angel',
+    'King','Queen','Lord','Master','Legend','Epic','Super','Ultra','Mega','Hyper',
+    'Pro','Ace','Elite','Prime','Alpha','Beta','Omega','Nova','Star','Sky','Moon',
+    'Sun','Light','Void','Frost','Flame','Aqua','Terra','Aero','Metal'
   ];
-  
+
   const suffixes = [
-    'Slayer', 'Killer', 'Hunter', 'Destroyer', 'Breaker', 'Crusher', 'Reaper',
-    'Striker', 'Warrior', 'Knight', 'Guardian', 'Champion', 'Hero', 'Legend',
-    'Master', 'Lord', 'King', 'Dragon', 'Wolf', 'Tiger', 'Bear', 'Eagle',
-    'Blade', 'Sword', 'Rider', 'Walker', 'Runner', 'Miner', 'Builder',
-    'Crafter', 'Gamer', 'Player'
+    'Slayer','Killer','Hunter','Destroyer','Breaker','Crusher','Reaper','Striker',
+    'Warrior','Knight','Guardian','Champion','Hero','Legend','Master','Lord','King',
+    'Dragon','Wolf','Tiger','Bear','Eagle','Blade','Sword','Rider','Walker','Runner',
+    'Miner','Builder','Crafter','Gamer','Player'
   ];
-  
+
   const styles = [
-    () => prefixes[Math.floor(Math.random() * prefixes.length)] + 
-          suffixes[Math.floor(Math.random() * suffixes.length)] + 
+    () => prefixes[Math.floor(Math.random() * prefixes.length)] +
+          suffixes[Math.floor(Math.random() * suffixes.length)] +
           Math.floor(Math.random() * 9999),
-    () => prefixes[Math.floor(Math.random() * prefixes.length)] + 
-          Math.floor(Math.random() * 999) + 
+
+    () => prefixes[Math.floor(Math.random() * prefixes.length)] +
+          Math.floor(Math.random() * 999) +
           suffixes[Math.floor(Math.random() * suffixes.length)],
-    () => 'xX_' + prefixes[Math.floor(Math.random() * prefixes.length)] + 
-          suffixes[Math.floor(Math.random() * suffixes.length)] + '_Xx',
-    () => prefixes[Math.floor(Math.random() * prefixes.length)] + '_' + 
-          suffixes[Math.floor(Math.random() * suffixes.length)] + '_' + 
+
+    () => 'xX_' +
+          prefixes[Math.floor(Math.random() * prefixes.length)] +
+          suffixes[Math.floor(Math.random() * suffixes.length)] +
+          '_Xx',
+
+    () => prefixes[Math.floor(Math.random() * prefixes.length)] + '_' +
+          suffixes[Math.floor(Math.random() * suffixes.length)] + '_' +
           Math.floor(Math.random() * 999),
-    () => prefixes[Math.floor(Math.random() * prefixes.length)] + 
+
+    () => prefixes[Math.floor(Math.random() * prefixes.length)] +
           Math.floor(Math.random() * 99999)
   ];
-  
+
   let username = styles[Math.floor(Math.random() * styles.length)]();
   return username.length > 16 ? username.substring(0, 16) : username;
 }
 
 function createBot() {
-  // Zaten bot varsa veya bağlanıyorsa, yeni bot oluşturma
   if (bot || isConnecting) {
     console.log('⚠️ Bot zaten aktif, yeni bot oluşturulmuyor');
     return;
   }
-  
+
   isConnecting = true;
   const username = getRandomUsername();
   console.log('\n🤖 Yeni bot oluşturuluyor:', username);
-  
+
   try {
     bot = mineflayer.createBot({
       host: 'iamsofiathefirsttt.aternos.me',
       port: 25565,
-      username: username,
+      username,
       version: '1.20.4',
       auth: 'offline',
       hideErrors: false,
-      checkTimeoutInterval: 60000, // 60 saniyeye çıkar
-      keepAlive: true,
-      connectTimeout: 120000 // 2 dakika bağlantı timeout'u
+      checkTimeoutInterval: 30000,
+      keepAlive: true
     });
-    
-    // 2 dakika içinde bağlanamazsa timeout (Aternos uyanma süresi için)
+
     const connectionTimeout = setTimeout(() => {
-      console.log('⏱️ Bağlantı zaman aşımı - Sunucu muhtemelen uyuyor');
+      console.log('⏱️ Bağlantı zaman aşımı');
       cleanupBot();
-      
-      // 30-90 saniye bekle (maks 1.5 dk)
-      const waitTime = (30 + Math.floor(Math.random() * 60)) * 1000;
-      console.log('⏳ Yeni bot:', Math.floor(waitTime / 1000), 'saniye sonra');
       setTimeout(() => {
         if (shouldReconnect) createBot();
-      }, waitTime);
-    }, 120000); // 2 dakika timeout
-    
+      }, Math.floor(Math.random() * 90) * 1000);
+    }, 60000);
+
     bot.once('login', () => {
       clearTimeout(connectionTimeout);
       isConnecting = false;
       console.log('✅ Giriş başarılı:', username);
-      
-      // 60-120 saniye kal (1-2 dakika)
-      const stayTime = (60 + Math.floor(Math.random() * 60)) * 1000;
+
+      // 0–2 dakika kal (max 2 dk)
+      const stayTime = Math.floor(Math.random() * 120) * 1000;
       console.log('⏱️ Kalma süresi:', Math.floor(stayTime / 1000), 'saniye');
-      
+
       setTimeout(() => {
         console.log('👋 Bot çıkıyor...');
-        if (bot) {
-          try {
-            bot.end();
-          } catch (e) {}
-        }
+        try { bot.end(); } catch {}
       }, stayTime);
     });
-    
+
     bot.once('spawn', () => {
       console.log('🎮 Spawn oldu!');
     });
-    
+
     bot.on('end', (reason) => {
       clearTimeout(connectionTimeout);
       console.log('❌ Bağlantı kesildi:', reason || 'bilinmiyor');
       cleanupBot();
-      
-      // 30-90 saniye bekle (maks 1.5 dk)
-      const waitTime = (30 + Math.floor(Math.random() * 60)) * 1000;
+
+      // 0–1.5 dakika bekle (max 90 sn)
+      const waitTime = Math.floor(Math.random() * 90) * 1000;
       console.log('⏳ Yeni bot:', Math.floor(waitTime / 1000), 'saniye sonra');
-      
+
       setTimeout(() => {
         if (shouldReconnect) createBot();
       }, waitTime);
     });
-    
+
     bot.on('kicked', (reason) => {
       clearTimeout(connectionTimeout);
       console.log('⚠️ Kicklendi:', reason);
       cleanupBot();
-      
-      // 60-90 saniye bekle (1-1.5 dk)
-      const waitTime = (60 + Math.floor(Math.random() * 30)) * 1000;
-      console.log('⏳ Yeni bot:', Math.floor(waitTime / 1000), 'saniye sonra');
-      
+
+      // 0–1.5 dakika bekle
       setTimeout(() => {
         if (shouldReconnect) createBot();
-      }, waitTime);
+      }, Math.floor(Math.random() * 90) * 1000);
     });
-    
+
     bot.on('error', (err) => {
       clearTimeout(connectionTimeout);
-      
+
       if (err.code === 'ECONNREFUSED') {
         console.log('⚠️ Sunucu kapalı');
       } else if (err.code === 'ECONNRESET') {
@@ -152,43 +142,35 @@ function createBot() {
       } else {
         console.log('⚠️ Hata:', err.message);
       }
-      
+
       cleanupBot();
-      
-      // Sunucu kapalıysa 60-90 saniye, diğer hatalarda 30-60 saniye bekle
-      const waitTime = err.code === 'ECONNREFUSED' 
-        ? (60 + Math.floor(Math.random() * 30)) * 1000  // 60-90 sn
-        : (30 + Math.floor(Math.random() * 30)) * 1000;  // 30-60 sn
-      
+
+      // max 1.5 dakika random
+      const waitTime = Math.floor(Math.random() * 90) * 1000;
       console.log('⏳ Yeniden deneme:', Math.floor(waitTime / 1000), 'saniye sonra');
-      
+
       setTimeout(() => {
         if (shouldReconnect) createBot();
       }, waitTime);
     });
-    
+
   } catch (err) {
     console.log('⚠️ Bot oluşturma hatası:', err.message);
     cleanupBot();
-    
-    // 30-60 saniye bekle
-    const waitTime = (30 + Math.floor(Math.random() * 30)) * 1000;
-    console.log('⏳ Yeni bot:', Math.floor(waitTime / 1000), 'saniye sonra');
-    
+
     setTimeout(() => {
       if (shouldReconnect) createBot();
-    }, waitTime);
+    }, Math.floor(Math.random() * 90) * 1000);
   }
 }
 
-// Bot temizleme fonksiyonu
 function cleanupBot() {
   isConnecting = false;
   if (bot) {
     try {
       bot.removeAllListeners();
       bot.end();
-    } catch (e) {}
+    } catch {}
     bot = null;
   }
 }
@@ -196,14 +178,10 @@ function cleanupBot() {
 console.log('🚀 Minecraft Bot Başlatılıyor...');
 console.log('🎯 Sunucu: iamsofiathefirsttt.aternos.me');
 console.log('📦 Versiyon: 1.20.4');
-console.log('🔄 Mod: Tek bot, sırayla giriş');
-console.log('⏱️ Oyunda kalma: 1-2 dakika');
-console.log('⏳ Bekleme süresi: 0.5-1.5 dakika\n');
+console.log('🔄 Mod: Tek bot, sırayla giriş\n');
 
-// İlk botu başlat
 setTimeout(() => createBot(), 2000);
 
-// Temizlik
 process.on('SIGINT', () => {
   console.log('\n⛔ Kapatılıyor...');
   shouldReconnect = false;
