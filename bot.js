@@ -13,8 +13,8 @@ const sessions = {};
 
 // Admin bilgileri (değiştir!)
 const ADMIN = {
-  username: 'admin',
-  password: 'admin123' // ⚠️ DEĞİŞTİR!
+  username: 'tahadoguu7',
+  password: 'taha2009' // ⚠️ DEĞİŞTİR!
 };
 
 // Sunucular ve botlar
