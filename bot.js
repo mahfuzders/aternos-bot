@@ -73,13 +73,17 @@ function createBot() {
       version: '1.20.4',
       auth: 'offline',
       hideErrors: false,
-      checkTimeoutInterval: 30000,
-      keepAlive: true
+      checkTimeoutInterval: 60000,
+      keepAlive: true,
+      connectTimeout: 120000,
+      // Render'dan bağlantı için ek ayarlar
+      skipValidation: true,
+      viewDistance: 'tiny'
     });
     
-    // 60 saniye içinde bağlanamazsa timeout
+    // 2 dakika içinde bağlanamazsa timeout (Aternos uyanma süresi için)
     const connectionTimeout = setTimeout(() => {
-      console.log('⏱️ Bağlantı zaman aşımı');
+      console.log('⏱️ Bağlantı zaman aşımı - Sunucu muhtemelen uyuyor');
       cleanupBot();
       
       // 30-90 saniye bekle (maks 1.5 dk)
@@ -88,7 +92,7 @@ function createBot() {
       setTimeout(() => {
         if (shouldReconnect) createBot();
       }, waitTime);
-    }, 60000);
+    }, 120000); // 2 dakika timeout
     
     bot.once('login', () => {
       clearTimeout(connectionTimeout);
